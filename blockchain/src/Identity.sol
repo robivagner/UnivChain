@@ -6,12 +6,16 @@ import {IERC165} from "./Interfaces/IERC165.sol";
 import {IERC4671} from "./Interfaces/IERC4671.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
-abstract contract Identity is IERC4671, AccessControl {
+contract Identity is IERC4671, AccessControl {
+    // Errors
+
+    // State variables
+
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant PROFESSOR_ROLE = keccak256("PROFESSOR_ROLE");
 
     struct Student {
-        string fullName;
+        string name;
         string faculty;
         string registrationNumber;
         uint256 registrationDate;
@@ -19,14 +23,20 @@ abstract contract Identity is IERC4671, AccessControl {
     }
 
     uint256 public tokenIdCounter;
-    mapping(uint256 => address) public owners;
-    mapping(address => uint256) internal _balances;
-    mapping(uint256 => Student) public students;
-    mapping(address => uint256) public addressToTokenId;
+
+    mapping(uint256 tokenId => address student) public owners;
+    mapping(uint256 tokenId => Student) public students;
+    mapping(address student => uint256 tokenId) public studentToTokenId;
+
+    mapping(address student => uint256 balance) internal _balances;
+
+    // Functions
 
     constructor(address _initialAdmin) {
         _grantRole(DEFAULT_ADMIN_ROLE, _initialAdmin);
         _grantRole(ADMIN_ROLE, _initialAdmin);
+
+        tokenIdCounter = 1;
     }
 
     function mintStudent(
@@ -35,15 +45,16 @@ abstract contract Identity is IERC4671, AccessControl {
         string memory _faculty,
         string memory _registrationNumber
     ) public onlyRole(ADMIN_ROLE) {
-        require(_balances[student] == 0, "Student already has an identity");
+        require(_balances[student] == 0, "Student already has an identity.");
+        require(student != address(0), "Student can't be address(0).");
 
         uint256 tokenId = tokenIdCounter++;
         owners[tokenId] = student;
         _balances[student] = 1;
-        addressToTokenId[student] = tokenId;
+        studentToTokenId[student] = tokenId;
 
         students[tokenId] = Student({
-            fullName: _name,
+            name: _name,
             faculty: _faculty,
             registrationNumber: _registrationNumber,
             registrationDate: block.timestamp,
@@ -59,7 +70,7 @@ abstract contract Identity is IERC4671, AccessControl {
 
     function ownerOf(uint256 tokenId) public view override returns (address) {
         address owner = owners[tokenId];
-        require(owner != address(0), "Token does not exist");
+        require(owner != address(0), "Token does not exist.");
         return owner;
     }
 
@@ -72,7 +83,7 @@ abstract contract Identity is IERC4671, AccessControl {
     }
 
     function hasValid(address owner) public view override returns (bool) {
-        uint256 tokenId = addressToTokenId[owner];
+        uint256 tokenId = studentToTokenId[owner];
         return isValid(tokenId);
     }
 
