@@ -19,8 +19,16 @@ interface ICertification is IERC4671 {
     /// @param student The address of the graduating student
     /// @param degreeTitle The title bestowed (e.g. Bachelor, Master)
     /// @param major The specific field of study
-    function issueDiploma(address student, string calldata degreeTitle, string calldata major) external;
+    function issueDiploma(
+        address student,
+        string calldata degreeTitle,
+        string calldata major,
+        uint256 credits,
+        uint256 average
+    ) external;
 
     /// @notice Returns the diploma details for a specific token ID
     function getDiplomaMetadata(uint256 tokenId) external view returns (uint256, uint256, string memory, string memory);
+
+    function getUniversityCoreContract() external view returns (address);
 }

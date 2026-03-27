@@ -17,10 +17,13 @@ contract UniversityCore is IUniversityCore, AccessControl {
     error UniversityCore__FacultyNameZero();
     error UniversityCore__StudentIsNotEnrolled(address student);
     error UniversityCore__ContractDoesNotSupportIERC4671(address verifiedContract);
+    error UniversityCore__StudentEnrolledAlready(address student);
+    error UniversityCore__StudentAlreadyHasDiploma(address student);
 
     // State variables
     bytes32 public constant PROFESSOR_ROLE = keccak256("PROFESSOR_ROLE");
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    bytes32 public constant DIPLOMA_ISSUER_ROLE = keccak256("DIPLOMA_ISSUER_ROLE");
 
     string public s_facultyName;
     IStudentRegistry public s_studentRegistryContract;
@@ -31,8 +34,9 @@ contract UniversityCore is IUniversityCore, AccessControl {
 
     event StudentRegistryContractSet(address newStudentRegistryContract, address oldStudentRegistryContract);
     event GradebookContractSet(address newGradebookContract, address oldGradebookContract);
-    event CertificationSet(address newCertificationContract, address oldCertificationContract);
+    event CertificationContractSet(address newCertificationContract, address oldCertificationContract);
     event ProfessorAdded(address indexed professor);
+    event DiplomaIssuerAdded(address indexed issuer);
     event FacultyNameSet(string facultyName);
 
     // Functions
@@ -101,17 +105,7 @@ contract UniversityCore is IUniversityCore, AccessControl {
         address oldCertificationContract = address(s_certificationContract);
         s_certificationContract = ICertification(certificationContract);
 
-        emit CertificationSet(certificationContract, oldCertificationContract);
-    }
-
-    function setFacultyName(string memory facultyName) external override onlyRole(ADMIN_ROLE) {
-        if (bytes(facultyName).length == 0) {
-            revert UniversityCore__FacultyNameZero();
-        }
-
-        s_facultyName = facultyName;
-
-        emit FacultyNameSet(facultyName);
+        emit CertificationContractSet(certificationContract, oldCertificationContract);
     }
 
     function addProfessor(address professor) external override onlyRole(ADMIN_ROLE) {
@@ -120,24 +114,18 @@ contract UniversityCore is IUniversityCore, AccessControl {
         emit ProfessorAdded(professor);
     }
 
-    function enrollStudent(address student, string memory name, string memory faculty, string memory registrationNumber)
-        external
-        override
-        onlyRole(ADMIN_ROLE)
-    {
-        s_studentRegistryContract.enrollStudent(student, name, faculty, registrationNumber);
+    function addDiplomaIssuer(address issuer) external override onlyRole(ADMIN_ROLE) {
+        _grantRole(DIPLOMA_ISSUER_ROLE, issuer);
+
+        emit DiplomaIssuerAdded(issuer);
     }
 
-    function graduateStudent(address student, string calldata degree, string calldata major)
-        external
-        override
-        onlyRole(ADMIN_ROLE)
-    {
-        if (!s_studentRegistryContract.hasValid(student)) {
-            revert UniversityCore__StudentIsNotEnrolled(student);
+    function enrollStudent(address student, string memory registrationNumber) external override onlyRole(ADMIN_ROLE) {
+        if (s_studentRegistryContract.hasValid(student)) {
+            revert UniversityCore__StudentEnrolledAlready(student);
         }
 
-        s_certificationContract.issueDiploma(student, degree, major);
+        s_studentRegistryContract.enrollStudent(student, s_facultyName, registrationNumber);
     }
 
     function postGrade(address student, uint256 subjectId, uint8 grade) external override onlyRole(PROFESSOR_ROLE) {
@@ -148,11 +136,34 @@ contract UniversityCore is IUniversityCore, AccessControl {
         s_gradebookContract.postGrade(msg.sender, student, subjectId, grade);
     }
 
+    function setSubjectActivity(uint256 subjectId, bool isActive) external override onlyRole(PROFESSOR_ROLE) {
+        s_gradebookContract.setSubjectActivity(msg.sender, subjectId, isActive);
+    }
+
+    function issueDiploma(
+        address student,
+        string calldata degreeTitle,
+        string calldata major,
+        uint256[] calldata subjectIds
+    ) external override onlyRole(DIPLOMA_ISSUER_ROLE) {
+        if (!s_studentRegistryContract.hasValid(student)) {
+            revert UniversityCore__StudentIsNotEnrolled(student);
+        }
+        if (s_certificationContract.hasValid(student)) {
+            revert UniversityCore__StudentAlreadyHasDiploma(student);
+        }
+
+        uint256 credits = s_gradebookContract.getStudentCredits(student);
+        uint256 weightedAverage = s_gradebookContract.getWeightedAverage(student, subjectIds);
+
+        s_certificationContract.issueDiploma(student, degreeTitle, major, credits, weightedAverage);
+    }
+
     //////////////////////////////
     /////// View Functions ///////
     //////////////////////////////
 
-    function getStudentRegistryContractSetContract() external view override returns (address) {
+    function getStudentRegistryContract() external view override returns (address) {
         return address(s_studentRegistryContract);
     }
 

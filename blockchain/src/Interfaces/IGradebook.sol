@@ -32,6 +32,8 @@ interface IGradebook {
     /// @param grade The numeric grade awarded
     function postGrade(address professor, address student, uint256 subjectId, uint8 grade) external;
 
+    function setSubjectActivity(address professor, uint256 subjectId, bool isActive) external;
+
     /// @notice Fetches details about a specific subject
     /// @param subjectId The ID of the subject to query
     /// @return name Name of the subject
@@ -44,4 +46,13 @@ interface IGradebook {
         returns (string memory name, uint8 credits, address professor, bool isActive);
 
     function getStudentCredits(address student) external view returns (uint256);
+
+    function getUniversityCoreContract() external view returns (address);
+
+    function getStudentGradeRecordOfSubject(address student, uint256 subjectId)
+        external
+        view
+        returns (uint8, uint256, address);
+
+    function getWeightedAverage(address student, uint256[] calldata subjectIds) external view returns (uint256 average);
 }

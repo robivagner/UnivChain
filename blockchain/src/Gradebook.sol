@@ -17,6 +17,8 @@ contract Gradebook is IGradebook {
 
     // State variables
 
+    uint256 public constant WEIGHTED_AVERAGE_PRECISION = 100;
+
     IUniversityCore immutable i_coreContract;
 
     uint256 public s_subjectId;
@@ -29,6 +31,7 @@ contract Gradebook is IGradebook {
 
     event SubjectAdded(uint256 indexed subjectId, string name, uint8 credits);
     event GradePosted(address indexed student, uint256 subjectId, uint8 grade);
+    event SubjectActivityChanged(uint256 subjectId, bool isActive);
 
     // Functions
 
@@ -55,6 +58,10 @@ contract Gradebook is IGradebook {
     }
 
     function postGrade(address professor, address student, uint256 subjectId, uint8 grade) external override onlyCore {
+        if (subjectId >= s_subjectId) {
+            revert Gradebook__SubjectIdOutOfBounds(subjectId, s_subjectId);
+        }
+
         Subject memory subject = s_subjects[subjectId];
         if (!subject.isActive) {
             revert Gradebook__SubjectNotActive(subjectId);
@@ -79,6 +86,21 @@ contract Gradebook is IGradebook {
         emit GradePosted(student, subjectId, grade);
     }
 
+    function setSubjectActivity(address professor, uint256 subjectId, bool isActive) external override onlyCore {
+        if (subjectId >= s_subjectId) {
+            revert Gradebook__SubjectIdOutOfBounds(subjectId, s_subjectId);
+        }
+
+        Subject storage subject = s_subjects[subjectId];
+        if (professor != subject.professor) {
+            revert Gradebook__NotProfessorOfSubject(professor, subjectId);
+        }
+
+        subject.isActive = isActive;
+
+        emit SubjectActivityChanged(subjectId, isActive);
+    }
+
     //////////////////////////////
     /////// View Functions ///////
     //////////////////////////////
@@ -98,9 +120,52 @@ contract Gradebook is IGradebook {
         return (subject.name, subject.credits, subject.professor, subject.isActive);
     }
 
+    function getStudentGradeRecordOfSubject(address student, uint256 subjectId)
+        external
+        view
+        override
+        returns (uint8, uint256, address)
+    {
+        GradeRecord memory grades = s_studentGrades[student][subjectId];
+
+        return (grades.grade, grades.timestamp, grades.professor);
+    }
+
     function getStudentCredits(address student) external view override returns (uint256) {
         return s_studentCredits[student];
     }
 
-    //TODO maybe add a function that calculates current weighted average of the student?
+    function getUniversityCoreContract() external view override returns (address) {
+        return address(i_coreContract);
+    }
+
+    function getWeightedAverage(address student, uint256[] calldata subjectIds)
+        external
+        view
+        override
+        returns (uint256 average)
+    {
+        uint256 totalCredits;
+        uint256 totalWeightedPoints;
+
+        for (uint256 i = 0; i < subjectIds.length; i++) {
+            uint256 id = subjectIds[i];
+            uint8 grade = s_studentGrades[student][id].grade;
+
+            if (id >= s_subjectId || s_studentGrades[student][id].timestamp == 0) {
+                continue;
+            }
+
+            uint8 credits = s_subjects[id].credits;
+
+            totalWeightedPoints += uint256(grade) * uint256(credits);
+            totalCredits += uint256(credits);
+        }
+
+        if (totalCredits == 0) {
+            return 0;
+        }
+
+        return (totalWeightedPoints * WEIGHTED_AVERAGE_PRECISION) / totalCredits;
+    }
 }

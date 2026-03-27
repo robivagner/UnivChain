@@ -22,25 +22,14 @@ interface IUniversityCore {
     /// @param certificationContract The address of the new Certification contract
     function setCertificationContract(address certificationContract) external;
 
-    /// @notice Updates the Faculty name
-    /// @param facultyName The name of the Faculty
-    function setFacultyName(string memory facultyName) external;
-
     function addProfessor(address professor) external;
+
+    function addDiplomaIssuer(address issuer) external;
 
     /// @notice Gateway function to mint a student identity through the Identity module
     /// @param student Wallet address of the student
-    /// @param name Student's full name
-    /// @param faculty Assigned faculty
     /// @param registrationNumber University matriculation number
-    function enrollStudent(
-        address student,
-        string calldata name,
-        string calldata faculty,
-        string calldata registrationNumber
-    ) external;
-
-    function graduateStudent(address student, string calldata degree, string calldata major) external;
+    function enrollStudent(address student, string calldata registrationNumber) external;
 
     /// @notice Gateway function for professors to post grades through the Gradebook module
     /// @dev Verifies that the student has a valid identity before proceeding
@@ -49,7 +38,16 @@ interface IUniversityCore {
     /// @param grade The numeric grade (1-10)
     function postGrade(address student, uint256 subjectId, uint8 grade) external;
 
-    function getStudentRegistryContractSetContract() external view returns (address);
+    function setSubjectActivity(uint256 subjectId, bool isActive) external;
+
+    function issueDiploma(
+        address student,
+        string calldata degreeTitle,
+        string calldata major,
+        uint256[] calldata subjectIds
+    ) external;
+
+    function getStudentRegistryContract() external view returns (address);
 
     function getGradebookContract() external view returns (address);
 

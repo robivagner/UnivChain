@@ -47,7 +47,7 @@ contract StudentRegistry is IStudentRegistry {
         s_tokenIdCounter = 1;
     }
 
-    function enrollStudent(address student, string memory name, string memory faculty, string memory registrationNumber)
+    function enrollStudent(address student, string memory faculty, string memory registrationNumber)
         external
         override
         onlyCore
@@ -65,11 +65,7 @@ contract StudentRegistry is IStudentRegistry {
         s_studentToTokenId[student] = tokenId;
 
         s_students[tokenId] = Student({
-            registrationDate: block.timestamp,
-            name: name,
-            faculty: faculty,
-            registrationNumber: registrationNumber,
-            revoked: false
+            registrationDate: block.timestamp, faculty: faculty, registrationNumber: registrationNumber, revoked: false
         });
 
         emit Minted(student, tokenId);
@@ -111,15 +107,11 @@ contract StudentRegistry is IStudentRegistry {
         emit Revoked(owner, tokenId);
     }
 
-    function supportsInterface(bytes4 interfaceId) external view virtual override(IERC165) returns (bool) {
-        return interfaceId == type(IERC4671).interfaceId || interfaceId == type(IERC165).interfaceId;
-    }
-
     function getStudentMetadata(address student)
         external
         view
         override
-        returns (uint256, string memory, string memory, string memory, bool)
+        returns (uint256, string memory, string memory, bool)
     {
         uint256 tokenId = s_studentToTokenId[student];
         if (tokenId == 0) {
@@ -128,7 +120,15 @@ contract StudentRegistry is IStudentRegistry {
 
         Student memory s = s_students[tokenId];
 
-        return (s.registrationDate, s.name, s.faculty, s.registrationNumber, s.revoked);
+        return (s.registrationDate, s.faculty, s.registrationNumber, s.revoked);
+    }
+
+    function getUniversityCoreContract() external view override returns (address) {
+        return address(i_coreContract);
+    }
+
+    function supportsInterface(bytes4 interfaceId) public view virtual override(IERC165) returns (bool) {
+        return interfaceId == type(IERC4671).interfaceId || interfaceId == type(IERC165).interfaceId;
     }
 
     //////////////////////////////////

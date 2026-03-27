@@ -5,14 +5,12 @@ pragma solidity ^0.8.25;
 import {ICertification, IERC4671} from "./Interfaces/ICertification.sol";
 import {IERC165} from "./Interfaces/IERC165.sol";
 import {IUniversityCore} from "./Interfaces/IUniversityCore.sol";
-import {IGradebook} from "./Interfaces/IGradebook.sol";
 
 contract Certification is ICertification {
     // Errors
 
     error Certification__NotCore(address sender);
     error Certification__AddressZero();
-    error Certification__AlreadyGraduated(address student);
     error Certification__NotEnoughCredits(address student, uint256 credits);
     error Certification__DiplomaDoesNotExist(uint256 tokenId);
 
@@ -48,20 +46,15 @@ contract Certification is ICertification {
         s_diplomaIdCounter = 1;
     }
 
-    function issueDiploma(address student, string calldata degreeTitle, string calldata major)
-        external
-        override
-        onlyCore
-    {
-        if (s_balances[student] != 0) {
-            revert Certification__AlreadyGraduated(student);
-        }
-
-        IGradebook gradebook = IGradebook(i_coreContract.getGradebookContract());
-
-        uint256 studentCredits = gradebook.getStudentCredits(student);
-        if (studentCredits < CREDITS_REQUIRED_FOR_GRADUATION) {
-            revert Certification__NotEnoughCredits(student, studentCredits);
+    function issueDiploma(
+        address student,
+        string calldata degreeTitle,
+        string calldata major,
+        uint256 credits,
+        uint256 weightedAverage
+    ) external override onlyCore {
+        if (credits < CREDITS_REQUIRED_FOR_GRADUATION) {
+            revert Certification__NotEnoughCredits(student, credits);
         }
 
         uint256 tokenId = s_diplomaIdCounter++;
@@ -70,10 +63,7 @@ contract Certification is ICertification {
         s_studentToDiplomaId[student] = tokenId;
 
         s_diplomas[tokenId] = Diploma({
-            degreeTitle: degreeTitle,
-            finalAverage: 0, // TODO Implement getWeightedAverage from the Gradebook contract
-            issueDate: block.timestamp,
-            major: major
+            degreeTitle: degreeTitle, finalAverage: weightedAverage, issueDate: block.timestamp, major: major
         });
 
         emit Minted(student, tokenId);
@@ -118,7 +108,11 @@ contract Certification is ICertification {
         return (diploma.finalAverage, diploma.issueDate, diploma.degreeTitle, diploma.major);
     }
 
-    function supportsInterface(bytes4 interfaceId) external view virtual override returns (bool) {
+    function getUniversityCoreContract() external view override returns (address) {
+        return address(i_coreContract);
+    }
+
+    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
         return interfaceId == type(IERC4671).interfaceId || interfaceId == type(IERC165).interfaceId;
     }
 }
