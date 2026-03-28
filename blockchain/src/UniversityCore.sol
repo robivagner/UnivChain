@@ -19,6 +19,7 @@ contract UniversityCore is IUniversityCore, AccessControl {
     error UniversityCore__ContractDoesNotSupportIERC4671(address verifiedContract);
     error UniversityCore__StudentEnrolledAlready(address student);
     error UniversityCore__StudentAlreadyHasDiploma(address student);
+    error UniversityCore__AccountIsNotProfessor(address professor);
 
     // State variables
     bytes32 public constant PROFESSOR_ROLE = keccak256("PROFESSOR_ROLE");
@@ -126,6 +127,14 @@ contract UniversityCore is IUniversityCore, AccessControl {
         }
 
         s_studentRegistryContract.enrollStudent(student, s_facultyName, registrationNumber);
+    }
+
+    function addSubject(string memory name, uint8 credits, address professor) external override onlyRole(ADMIN_ROLE) {
+        if (!hasRole(PROFESSOR_ROLE, professor)) {
+            revert UniversityCore__AccountIsNotProfessor(professor);
+        }
+
+        s_gradebookContract.addSubject(name, credits, professor);
     }
 
     function postGrade(address student, uint256 subjectId, uint8 grade) external override onlyRole(PROFESSOR_ROLE) {

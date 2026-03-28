@@ -13,7 +13,7 @@ contract StudentRegistryTest is Test {
 
     address public core = makeAddr("universityCore");
     address public student = makeAddr("student");
-    address public intruder = makeAddr("intruder");
+    address public alice = makeAddr("alice");
 
     function setUp() public {
         registry = new StudentRegistry(core);
@@ -35,21 +35,27 @@ contract StudentRegistryTest is Test {
         assertEq(regDate, block.timestamp);
     }
 
-    function test_RevertIfNotCoreAttemptsEnroll() public {
-        vm.prank(intruder);
-        vm.expectRevert(abi.encodeWithSelector(StudentRegistry.StudentRegistry__NotCore.selector, intruder));
-        registry.enrollStudent(student, "Faculty of Computer Science", "999");
-    }
-
     function test_RevertIfStudentAlreadyRegistered() public {
         vm.startPrank(core);
         registry.enrollStudent(student, "Faculty of Computer Science", "111");
 
         vm.expectRevert(
-            abi.encodeWithSelector(StudentRegistry.StudentRegistry__StudentAlreadyRegistered.selector, student)
+            abi.encodeWithSelector(StudentRegistry.StudentRegistry__StudentAlreadyEnrolled.selector, student)
         );
         registry.enrollStudent(student, "Faculty of Computer Science", "111");
         vm.stopPrank();
+    }
+
+    function test_RevertIfEnrollWithAddressZero() public {
+        vm.startPrank(core);
+        vm.expectRevert(StudentRegistry.StudentRegistry__AddressZero.selector);
+        registry.enrollStudent(address(0), "Faculty of Computer Science", "111");
+    }
+
+    function test_RevertIfNotCoreAttemptsEnroll() public {
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(StudentRegistry.StudentRegistry__NotCore.selector, alice));
+        registry.enrollStudent(student, "Faculty of Computer Science", "999");
     }
 
     function test_RevokeSuccess() public {
@@ -74,8 +80,8 @@ contract StudentRegistryTest is Test {
     }
 
     function test_GetMetadataRevertsForNonExistentStudent() public {
-        vm.expectRevert(abi.encodeWithSelector(StudentRegistry.StudentRegistry__StudentNotEnrolled.selector, intruder));
-        registry.getStudentMetadata(intruder);
+        vm.expectRevert(abi.encodeWithSelector(StudentRegistry.StudentRegistry__StudentNotEnrolled.selector, alice));
+        registry.getStudentMetadata(alice);
     }
 
     function test_SupportsInterfaceERC4671andERC165() public view {

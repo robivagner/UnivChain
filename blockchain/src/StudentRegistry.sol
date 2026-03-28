@@ -11,7 +11,7 @@ contract StudentRegistry is IStudentRegistry {
 
     error StudentRegistry__NotCore(address sender);
     error StudentRegistry__AddressZero();
-    error StudentRegistry__StudentAlreadyRegistered(address student);
+    error StudentRegistry__StudentAlreadyEnrolled(address student);
     error StudentRegistry__StudentNotEnrolled(address student);
     error StudentRegistry__InvalidTokenId(uint256 tokenId);
 
@@ -52,11 +52,11 @@ contract StudentRegistry is IStudentRegistry {
         override
         onlyCore
     {
-        if (s_balances[student] != 0) {
-            revert StudentRegistry__StudentAlreadyRegistered(student);
-        }
         if (student == address(0)) {
             revert StudentRegistry__AddressZero();
+        }
+        if (s_balances[student] != 0) {
+            revert StudentRegistry__StudentAlreadyEnrolled(student);
         }
 
         uint256 tokenId = s_tokenIdCounter++;

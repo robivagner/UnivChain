@@ -10,6 +10,7 @@ contract GradebookTest is Test {
     address public core = makeAddr("universityCore");
     address public professor = makeAddr("professorX");
     address public student = makeAddr("studentA");
+    address public alice = makeAddr("alice");
 
     function setUp() public {
         gradebook = new Gradebook(core);
@@ -28,6 +29,24 @@ contract GradebookTest is Test {
         (string memory name, uint8 credits,,) = gradebook.getSubjectMetadata(4);
         assertEq(name, "Fizica");
         assertEq(credits, 4);
+    }
+
+    function test_RevertAddSubjectIfNotCore() public {
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(Gradebook.Gradebook__NotCore.selector, alice));
+        gradebook.addSubject("Fizica", 4, professor);
+    }
+
+    function test_RevertPostGradeIfNotCore() public {
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(Gradebook.Gradebook__NotCore.selector, alice));
+        gradebook.postGrade(professor, student, 1, 4);
+    }
+
+    function test_RevertSetSubjectActivityIfNotCore() public {
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(Gradebook.Gradebook__NotCore.selector, alice));
+        gradebook.setSubjectActivity(professor, 1, false);
     }
 
     function test_SetSubjectActivityOnlyProfessor() public {
