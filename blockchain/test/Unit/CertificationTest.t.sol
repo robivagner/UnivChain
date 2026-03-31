@@ -20,7 +20,7 @@ contract CertificationTest is Test {
         certification = new Certification(core);
     }
 
-    function test_IssueDiploma_Success() public {
+    function test_IssueDiplomaSuccess() public {
         uint256 credits = 180; // Pragul minim
         uint256 avg = 950; // Media 9.50
 
@@ -32,15 +32,14 @@ contract CertificationTest is Test {
         assertTrue(certification.hasValid(student));
 
         uint256 tokenId = certification.s_studentToDiplomaId(student);
-        (uint256 savedAvg, uint256 issueDate, string memory title, string memory major) =
-            certification.getDiplomaMetadata(tokenId);
+        (uint256 savedAvg, uint256 issueDate, string memory title,) = certification.getDiplomaMetadata(tokenId);
 
         assertEq(savedAvg, 950);
         assertEq(title, "Licenta in Calculatoare");
         assertEq(issueDate, block.timestamp);
     }
 
-    function test_RevertIf_NotEnoughCredits() public {
+    function test_RevertIfNotEnoughCredits() public {
         uint256 creditsIncomplete = 175; // Sub pragul de 180
 
         vm.prank(core);
@@ -51,13 +50,13 @@ contract CertificationTest is Test {
         certification.issueDiploma(student, "Licenta", "IT", creditsIncomplete, 800);
     }
 
-    function test_RevertIf_NotCoreAttemptsIssue() public {
+    function test_RevertIfNotCoreAttemptsIssue() public {
         vm.prank(intruder);
         vm.expectRevert(abi.encodeWithSelector(Certification.Certification__NotCore.selector, intruder));
         certification.issueDiploma(student, "Licenta", "IT", 180, 800);
     }
 
-    function test_OwnerOf_RevertsIfDiplomaDoesNotExist() public {
+    function test_RevertOwnerOfIfDiplomaDoesNotExist() public {
         vm.expectRevert(abi.encodeWithSelector(Certification.Certification__DiplomaDoesNotExist.selector, 999));
         certification.ownerOf(999);
     }

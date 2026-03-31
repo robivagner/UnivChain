@@ -51,6 +51,8 @@ $ anvil
 $ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
 ```
 
+forge script script/DeployUniversity.s.sol:DeployUniversity --rpc-url http://127.0.0.1:8545 --broadcast --private-key $PRIVATE_KEY
+
 ### Cast
 
 ```shell

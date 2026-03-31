@@ -108,6 +108,10 @@ contract Certification is ICertification {
         return (diploma.finalAverage, diploma.issueDate, diploma.degreeTitle, diploma.major);
     }
 
+    function getDiplomaIdForStudent(address student) external view override returns (uint256) {
+        return s_studentToDiplomaId[student];
+    }
+
     function getUniversityCoreContract() external view override returns (address) {
         return address(i_coreContract);
     }

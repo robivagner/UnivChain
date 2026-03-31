@@ -33,7 +33,7 @@ contract UniversityCoreTest is Test {
         assertTrue(core.hasRole(core.PROFESSOR_ROLE(), professor));
     }
 
-    function test_OnlyAdminCanAddProfessor() public {
+    function test_RevertOnlyAdminCanAddProfessor() public {
         vm.prank(alice);
         vm.expectRevert();
         core.addProfessor(professor);
@@ -45,7 +45,7 @@ contract UniversityCoreTest is Test {
         assertTrue(core.hasRole(core.DIPLOMA_ISSUER_ROLE(), issuer));
     }
 
-    function test_OnlyAdminCanAddDiplomaIssuer() public {
+    function test_RevertOnlyAdminCanAddDiplomaIssuer() public {
         vm.expectRevert();
         core.addProfessor(issuer);
     }
@@ -59,19 +59,19 @@ contract UniversityCoreTest is Test {
         assertTrue(core.getStudentRegistryContract() != address(0));
     }
 
-    function test_OnlyAdminCanSetStudentRegistryContract() public {
+    function test_RevertOnlyAdminCanSetStudentRegistryContract() public {
         registry = new StudentRegistry(address(core));
         vm.expectRevert();
         core.setStudentRegistryContract(address(registry));
     }
 
-    function test_ZeroAddressSetStudentRegistryContract() public {
+    function test_RevertZeroAddressSetStudentRegistryContract() public {
         vm.prank(admin);
         vm.expectRevert(UniversityCore.UniversityCore__AddressZero.selector);
         core.setStudentRegistryContract(address(0));
     }
 
-    function test_SameAddressSetStudentRegistryContract() public {
+    function test_RevertSameAddressSetStudentRegistryContract() public {
         registry = new StudentRegistry(address(core));
 
         vm.prank(admin);
@@ -91,19 +91,19 @@ contract UniversityCoreTest is Test {
         assertTrue(core.getGradebookContract() != address(0));
     }
 
-    function test_OnlyAdminCanSetGradebookContract() public {
+    function test_RevertOnlyAdminCanSetGradebookContract() public {
         gradebook = new Gradebook(address(core));
         vm.expectRevert();
         core.setGradebookContract(address(gradebook));
     }
 
-    function test_ZeroAddressSetGradebookContract() public {
+    function test_RevertZeroAddressSetGradebookContract() public {
         vm.prank(admin);
         vm.expectRevert(UniversityCore.UniversityCore__AddressZero.selector);
         core.setGradebookContract(address(0));
     }
 
-    function test_SameAddressSetGradebookContract() public {
+    function test_RevertSameAddressSetGradebookContract() public {
         gradebook = new Gradebook(address(core));
 
         vm.prank(admin);
@@ -123,19 +123,19 @@ contract UniversityCoreTest is Test {
         assertTrue(core.getCertificationContract() != address(0));
     }
 
-    function test_OnlyAdminCanSetCertificationContract() public {
+    function test_RevertOnlyAdminCanSetCertificationContract() public {
         certification = new Certification(address(core));
         vm.expectRevert();
         core.setCertificationContract(address(certification));
     }
 
-    function test_ZeroAddressSetCertificationContract() public {
+    function test_RevertZeroAddressSetCertificationContract() public {
         vm.prank(admin);
         vm.expectRevert(UniversityCore.UniversityCore__AddressZero.selector);
         core.setCertificationContract(address(0));
     }
 
-    function test_SameAddressSetCertificationContract() public {
+    function test_RevertSameAddressSetCertificationContract() public {
         certification = new Certification(address(core));
 
         vm.prank(admin);

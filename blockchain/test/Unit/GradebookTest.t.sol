@@ -67,6 +67,12 @@ contract GradebookTest is Test {
         vm.stopPrank();
     }
 
+    function test_RevertPostGradeNotProfessor() public {
+        vm.startPrank(core);
+        vm.expectRevert(abi.encodeWithSelector(Gradebook.Gradebook__NotProfessorOfSubject.selector, student, 1));
+        gradebook.postGrade(student, student, 1, 4);
+    }
+
     function test_RevertIfGradeIsInvalid() public {
         vm.prank(core);
         vm.expectRevert(abi.encodeWithSelector(Gradebook.Gradebook__GradeGreaterThanTen.selector, 11));

@@ -20,6 +20,9 @@ contract UniversityCore is IUniversityCore, AccessControl {
     error UniversityCore__StudentEnrolledAlready(address student);
     error UniversityCore__StudentAlreadyHasDiploma(address student);
     error UniversityCore__AccountIsNotProfessor(address professor);
+    error UniversityCore__StudentRegistryNotSet();
+    error UniversityCore__GradebookNotSet();
+    error UniversityCore__CertificationNotSet();
 
     // State variables
     bytes32 public constant PROFESSOR_ROLE = keccak256("PROFESSOR_ROLE");
@@ -122,6 +125,9 @@ contract UniversityCore is IUniversityCore, AccessControl {
     }
 
     function enrollStudent(address student, string memory registrationNumber) external override onlyRole(ADMIN_ROLE) {
+        if (address(s_studentRegistryContract) == address(0)) {
+            revert UniversityCore__StudentRegistryNotSet();
+        }
         if (s_studentRegistryContract.hasValid(student)) {
             revert UniversityCore__StudentEnrolledAlready(student);
         }
@@ -130,6 +136,9 @@ contract UniversityCore is IUniversityCore, AccessControl {
     }
 
     function addSubject(string memory name, uint8 credits, address professor) external override onlyRole(ADMIN_ROLE) {
+        if (address(s_gradebookContract) == address(0)) {
+            revert UniversityCore__GradebookNotSet();
+        }
         if (!hasRole(PROFESSOR_ROLE, professor)) {
             revert UniversityCore__AccountIsNotProfessor(professor);
         }
@@ -137,7 +146,21 @@ contract UniversityCore is IUniversityCore, AccessControl {
         s_gradebookContract.addSubject(name, credits, professor);
     }
 
+    function addSubject(string memory name, uint8 credits) external override onlyRole(PROFESSOR_ROLE) {
+        if (address(s_gradebookContract) == address(0)) {
+            revert UniversityCore__GradebookNotSet();
+        }
+
+        s_gradebookContract.addSubject(name, credits, msg.sender);
+    }
+
     function postGrade(address student, uint256 subjectId, uint8 grade) external override onlyRole(PROFESSOR_ROLE) {
+        if (address(s_gradebookContract) == address(0)) {
+            revert UniversityCore__GradebookNotSet();
+        }
+        if (address(s_studentRegistryContract) == address(0)) {
+            revert UniversityCore__StudentRegistryNotSet();
+        }
         if (!s_studentRegistryContract.hasValid(student)) {
             revert UniversityCore__StudentIsNotEnrolled(student);
         }
@@ -146,6 +169,9 @@ contract UniversityCore is IUniversityCore, AccessControl {
     }
 
     function setSubjectActivity(uint256 subjectId, bool isActive) external override onlyRole(PROFESSOR_ROLE) {
+        if (address(s_gradebookContract) == address(0)) {
+            revert UniversityCore__GradebookNotSet();
+        }
         s_gradebookContract.setSubjectActivity(msg.sender, subjectId, isActive);
     }
 
@@ -155,6 +181,12 @@ contract UniversityCore is IUniversityCore, AccessControl {
         string calldata major,
         uint256[] calldata subjectIds
     ) external override onlyRole(DIPLOMA_ISSUER_ROLE) {
+        if (address(s_studentRegistryContract) == address(0)) {
+            revert UniversityCore__StudentRegistryNotSet();
+        }
+        if (address(s_certificationContract) == address(0)) {
+            revert UniversityCore__CertificationNotSet();
+        }
         if (!s_studentRegistryContract.hasValid(student)) {
             revert UniversityCore__StudentIsNotEnrolled(student);
         }

@@ -30,5 +30,7 @@ interface ICertification is IERC4671 {
     /// @notice Returns the diploma details for a specific token ID
     function getDiplomaMetadata(uint256 tokenId) external view returns (uint256, uint256, string memory, string memory);
 
+    function getDiplomaIdForStudent(address student) external view returns (uint256);
+
     function getUniversityCoreContract() external view returns (address);
 }

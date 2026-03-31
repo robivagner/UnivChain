@@ -33,6 +33,8 @@ interface IUniversityCore {
 
     function addSubject(string memory name, uint8 credits, address professor) external;
 
+    function addSubject(string memory name, uint8 credits) external;
+
     /// @notice Gateway function for professors to post grades through the Gradebook module
     /// @dev Verifies that the student has a valid identity before proceeding
     /// @param student Wallet address of the student
