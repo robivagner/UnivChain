@@ -1,0 +1,15 @@
+# --- Backend ---
+blockchain/out/
+blockchain/cache/
+blockchain/broadcast/
+blockchain/.env
+
+# --- Frontend ---
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
+frontend/dist/
+frontend/build/
+
+.DS_Store
+*.log
