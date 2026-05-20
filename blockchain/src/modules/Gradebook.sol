@@ -2,8 +2,8 @@
 
 pragma solidity ^0.8.25;
 
-import {IUniversityCore} from "./Interfaces/IUniversityCore.sol";
-import {IGradebook} from "./Interfaces/IGradebook.sol";
+import {IUniversityCore} from "../interfaces/IUniversityCore.sol";
+import {IGradebook} from "../interfaces/IGradebook.sol";
 
 contract Gradebook is IGradebook {
     // Errors
@@ -14,6 +14,7 @@ contract Gradebook is IGradebook {
     error Gradebook__NotProfessorOfSubject(address wrongProfessor, uint256 subjectId);
     error Gradebook__GradeGreaterThanTen(uint256 grade);
     error Gradebook__SubjectIdOutOfBounds(uint256 subjectId, uint256 upperBound);
+    error Gradebook__GradeAlreadyGiven(address student, uint256 subjectId, uint8 grade);
 
     // State variables
 
@@ -21,11 +22,11 @@ contract Gradebook is IGradebook {
 
     IUniversityCore immutable i_coreContract;
 
-    uint256 public s_subjectId;
-
+    uint256 public s_tokenIdCounter;
     mapping(uint256 subjectId => Subject) public s_subjects;
     mapping(address student => mapping(uint256 subjectId => GradeRecord)) public s_studentGrades;
     mapping(address student => uint256 credits) public s_studentCredits;
+    mapping(address student => uint256[] subjectIds) public s_studentSubjectIds;
 
     // Events
 
@@ -48,47 +49,38 @@ contract Gradebook is IGradebook {
         }
 
         i_coreContract = IUniversityCore(coreContract);
-        s_subjectId = 1;
+
+        s_tokenIdCounter = 1;
     }
 
-    function addSubject(string memory name, uint8 credits, address professor) external override onlyCore {
-        uint256 subjectId = s_subjectId++;
+    function addSubject(string memory name, uint8 credits, address professor) external onlyCore {
+        uint256 subjectId = s_tokenIdCounter++;
         s_subjects[subjectId] = Subject({name: name, credits: credits, professor: professor, isActive: true});
         emit SubjectAdded(subjectId, name, credits);
     }
 
-    function postGrade(address professor, address student, uint256 subjectId, uint8 grade) external override onlyCore {
-        if (subjectId >= s_subjectId) {
-            revert Gradebook__SubjectIdOutOfBounds(subjectId, s_subjectId);
-        }
-
+    function postGrade(address professor, address student, uint256 subjectId, uint8 grade) external onlyCore {
         Subject memory subject = s_subjects[subjectId];
-        if (!subject.isActive) {
-            revert Gradebook__SubjectNotActive(subjectId);
-        }
-        if (professor != subject.professor) {
-            revert Gradebook__NotProfessorOfSubject(professor, subjectId);
-        }
-        if (grade > 10) {
-            revert Gradebook__GradeGreaterThanTen(grade);
-        }
+        GradeRecord storage record = s_studentGrades[student][subjectId];
 
-        // if the student got a passable grade and he did not have a grade before or was not passing add the ects credits to the total
-        if (grade >= 5 && s_studentGrades[student][subjectId].grade < 5) {
+        _postGradeChecks(record, subject, student, professor, subjectId, grade);
+
+        if (grade >= 5) {
             s_studentCredits[student] += subject.credits;
-        } else if (grade < 5 && s_studentGrades[student][subjectId].grade >= 5) {
-            s_studentCredits[student] -= subject.credits;
         }
 
-        s_studentGrades[student][subjectId] =
-            GradeRecord({grade: grade, timestamp: block.timestamp, professor: professor});
+        s_studentSubjectIds[student].push(subjectId);
+
+        record.grade = grade;
+        record.timestamp = block.timestamp;
+        record.professor = professor;
 
         emit GradePosted(student, subjectId, grade);
     }
 
-    function setSubjectActivity(address professor, uint256 subjectId, bool isActive) external override onlyCore {
-        if (subjectId >= s_subjectId) {
-            revert Gradebook__SubjectIdOutOfBounds(subjectId, s_subjectId);
+    function setSubjectActivity(address professor, uint256 subjectId, bool isActive) external onlyCore {
+        if (subjectId >= s_tokenIdCounter) {
+            revert Gradebook__SubjectIdOutOfBounds(subjectId, s_tokenIdCounter);
         }
 
         Subject storage subject = s_subjects[subjectId];
@@ -105,14 +97,9 @@ contract Gradebook is IGradebook {
     /////// View Functions ///////
     //////////////////////////////
 
-    function getSubjectMetadata(uint256 subjectId)
-        external
-        view
-        override
-        returns (string memory, uint8, address, bool)
-    {
-        if (subjectId >= s_subjectId) {
-            revert Gradebook__SubjectIdOutOfBounds(subjectId, s_subjectId);
+    function getSubjectMetadata(uint256 subjectId) external view returns (string memory, uint8, address, bool) {
+        if (subjectId >= s_tokenIdCounter) {
+            revert Gradebook__SubjectIdOutOfBounds(subjectId, s_tokenIdCounter);
         }
 
         Subject memory subject = s_subjects[subjectId];
@@ -123,7 +110,6 @@ contract Gradebook is IGradebook {
     function getStudentGradeRecordOfSubject(address student, uint256 subjectId)
         external
         view
-        override
         returns (uint8, uint256, address)
     {
         GradeRecord memory grades = s_studentGrades[student][subjectId];
@@ -131,31 +117,22 @@ contract Gradebook is IGradebook {
         return (grades.grade, grades.timestamp, grades.professor);
     }
 
-    function getStudentCredits(address student) external view override returns (uint256) {
+    function getStudentCredits(address student) external view returns (uint256) {
         return s_studentCredits[student];
     }
 
-    function getUniversityCoreContract() external view override returns (address) {
+    function getUniversityCoreContract() external view returns (address) {
         return address(i_coreContract);
     }
 
-    function getWeightedAverage(address student, uint256[] calldata subjectIds)
-        external
-        view
-        override
-        returns (uint256 average)
-    {
+    function getWeightedAverage(address student) external view returns (uint256 average) {
+        uint256[] memory subjectIds = s_studentSubjectIds[student];
+
         uint256 totalCredits;
         uint256 totalWeightedPoints;
-
         for (uint256 i = 0; i < subjectIds.length; i++) {
             uint256 id = subjectIds[i];
             uint8 grade = s_studentGrades[student][id].grade;
-
-            if (id >= s_subjectId || s_studentGrades[student][id].timestamp == 0) {
-                continue;
-            }
-
             uint8 credits = s_subjects[id].credits;
 
             totalWeightedPoints += uint256(grade) * uint256(credits);
@@ -167,5 +144,34 @@ contract Gradebook is IGradebook {
         }
 
         return (totalWeightedPoints * WEIGHTED_AVERAGE_PRECISION) / totalCredits;
+    }
+
+    //////////////////////////////////
+    /////// Internal Functions ///////
+    //////////////////////////////////
+
+    function _postGradeChecks(
+        GradeRecord memory record,
+        Subject memory subject,
+        address student,
+        address professor,
+        uint256 subjectId,
+        uint8 grade
+    ) internal view {
+        if (record.grade != 0) {
+            revert Gradebook__GradeAlreadyGiven(student, subjectId, grade);
+        }
+        if (subjectId >= s_tokenIdCounter) {
+            revert Gradebook__SubjectIdOutOfBounds(subjectId, s_tokenIdCounter);
+        }
+        if (!subject.isActive) {
+            revert Gradebook__SubjectNotActive(subjectId);
+        }
+        if (professor != subject.professor) {
+            revert Gradebook__NotProfessorOfSubject(professor, subjectId);
+        }
+        if (grade > 10) {
+            revert Gradebook__GradeGreaterThanTen(grade);
+        }
     }
 }
