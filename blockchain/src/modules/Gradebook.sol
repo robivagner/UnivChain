@@ -5,9 +5,13 @@ pragma solidity ^0.8.25;
 import {IUniversityCore} from "../interfaces/IUniversityCore.sol";
 import {IGradebook} from "../interfaces/IGradebook.sol";
 
+/**
+ * @title Gradebook
+ * @notice Academic recording engine storing subjects, evaluating student marks, and keeping ECTS balances.
+ * @dev Implements the IGradebook interface and handles multi-layered parameter assertions.
+ */
 contract Gradebook is IGradebook {
     // Errors
-
     error Gradebook__NotCore(address sender);
     error Gradebook__AddressZero();
     error Gradebook__SubjectNotActive(uint256 subjectId);
@@ -17,7 +21,6 @@ contract Gradebook is IGradebook {
     error Gradebook__GradeAlreadyGiven(address student, uint256 subjectId, uint8 grade);
 
     // State variables
-
     uint256 public constant WEIGHTED_AVERAGE_PRECISION = 100;
 
     IUniversityCore immutable i_coreContract;
@@ -29,13 +32,11 @@ contract Gradebook is IGradebook {
     mapping(address student => uint256[] subjectIds) public s_studentSubjectIds;
 
     // Events
-
     event SubjectAdded(uint256 indexed subjectId, string name, uint8 credits);
     event GradePosted(address indexed student, uint256 subjectId, uint8 grade);
     event SubjectActivityChanged(uint256 subjectId, bool isActive);
 
-    // Functions
-
+    // Modifiers
     modifier onlyCore() {
         if (msg.sender != address(i_coreContract)) {
             revert Gradebook__NotCore(msg.sender);
@@ -43,22 +44,31 @@ contract Gradebook is IGradebook {
         _;
     }
 
+    /**
+     * @notice Constructor sets up tracking registries and links the core permissions contract.
+     * @param coreContract Central master configuration directory address.
+     */
     constructor(address coreContract) {
         if (coreContract == address(0)) {
             revert Gradebook__AddressZero();
         }
 
         i_coreContract = IUniversityCore(coreContract);
-
         s_tokenIdCounter = 1;
     }
 
+    //////////////////////////////
+    /////// Core Functions ///////
+    //////////////////////////////
+
+    /// @inheritdoc IGradebook
     function addSubject(string memory name, uint8 credits, address professor) external onlyCore {
         uint256 subjectId = s_tokenIdCounter++;
         s_subjects[subjectId] = Subject({name: name, credits: credits, professor: professor, isActive: true});
         emit SubjectAdded(subjectId, name, credits);
     }
 
+    /// @inheritdoc IGradebook
     function postGrade(address professor, address student, uint256 subjectId, uint8 grade) external onlyCore {
         Subject memory subject = s_subjects[subjectId];
         GradeRecord storage record = s_studentGrades[student][subjectId];
@@ -78,6 +88,7 @@ contract Gradebook is IGradebook {
         emit GradePosted(student, subjectId, grade);
     }
 
+    /// @inheritdoc IGradebook
     function setSubjectActivity(address professor, uint256 subjectId, bool isActive) external onlyCore {
         if (subjectId >= s_tokenIdCounter) {
             revert Gradebook__SubjectIdOutOfBounds(subjectId, s_tokenIdCounter);
@@ -97,34 +108,37 @@ contract Gradebook is IGradebook {
     /////// View Functions ///////
     //////////////////////////////
 
+    /// @inheritdoc IGradebook
     function getSubjectMetadata(uint256 subjectId) external view returns (string memory, uint8, address, bool) {
         if (subjectId >= s_tokenIdCounter) {
             revert Gradebook__SubjectIdOutOfBounds(subjectId, s_tokenIdCounter);
         }
 
         Subject memory subject = s_subjects[subjectId];
-
         return (subject.name, subject.credits, subject.professor, subject.isActive);
     }
 
+    /// @inheritdoc IGradebook
     function getStudentGradeRecordOfSubject(address student, uint256 subjectId)
         external
         view
         returns (uint8, uint256, address)
     {
         GradeRecord memory grades = s_studentGrades[student][subjectId];
-
         return (grades.grade, grades.timestamp, grades.professor);
     }
 
+    /// @inheritdoc IGradebook
     function getStudentCredits(address student) external view returns (uint256) {
         return s_studentCredits[student];
     }
 
+    /// @inheritdoc IGradebook
     function getUniversityCoreContract() external view returns (address) {
         return address(i_coreContract);
     }
 
+    /// @inheritdoc IGradebook
     function getWeightedAverage(address student) external view returns (uint256 average) {
         uint256[] memory subjectIds = s_studentSubjectIds[student];
 
@@ -150,6 +164,10 @@ contract Gradebook is IGradebook {
     /////// Internal Functions ///////
     //////////////////////////////////
 
+    /**
+     * @notice Performs strict sanity assertions prior to modifying state in postGrade.
+     * @dev Internal view helper minimizing gas overhead through stack variable evaluations.
+     */
     function _postGradeChecks(
         GradeRecord memory record,
         Subject memory subject,

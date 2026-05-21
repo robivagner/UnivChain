@@ -3,6 +3,7 @@ pragma solidity ^0.8.25;
 
 /// @title Interface for University Gradebook
 /// @notice Manages subjects, ECTS credits tracking, and student grading history securely.
+/// @dev Implemented by the Gradebook contract to manage institutional academic logs.
 interface IGradebook {
     /// @dev Structure defining an academic course/subject.
     struct Subject {
@@ -20,14 +21,14 @@ interface IGradebook {
     }
 
     /// @notice Registers a new subject into the gradebook.
-    /// @dev Can only be called via the UniversityCore contract.
+    /// @dev Can only be called via the UniversityCore contract. Generates a unique sequential subject ID.
     /// @param name The official name of the course.
     /// @param credits Number of ECTS credits associated with the subject.
     /// @param professor The address of the professor leading the course.
     function addSubject(string calldata name, uint8 credits, address professor) external;
 
     /// @notice Records a grade for a student in a specific subject.
-    /// @dev Verifies that the grade is valid (<=10) and only given once. Adds credits if grade >= 5.
+    /// @dev Verifies that the grade is valid (1-10) and only given once. Adds credits to student if grade >= 5.
     /// @param professor The address of the professor attempting to post the grade.
     /// @param student The address of the student receiving the grade.
     /// @param subjectId The unique identifier of the subject.
@@ -35,7 +36,8 @@ interface IGradebook {
     function postGrade(address professor, address student, uint256 subjectId, uint8 grade) external;
 
     /// @notice Toggles a subject's availability for grading.
-    /// @param professor The address attempting to change the status (must match the subject's professor).
+    /// @dev Verifies that the message sender matches the assigned subject professor.
+    /// @param professor The address attempting to change the status.
     /// @param subjectId The ID of the subject being updated.
     /// @param isActive True to open grading, false to close it.
     function setSubjectActivity(address professor, uint256 subjectId, bool isActive) external;
@@ -52,28 +54,29 @@ interface IGradebook {
         returns (string memory name, uint8 credits, address professor, bool isActive);
 
     /// @notice Calculates the total accumulated ECTS credits for a student.
+    /// @dev Credits are incremented exclusively when a grade of 5 or higher is obtained.
     /// @param student The address of the student to query.
-    /// @return The sum of credits from all passed subjects.
-    function getStudentCredits(address student) external view returns (uint256);
+    /// @return credits Total sum of ECTS credits from all passed subjects.
+    function getStudentCredits(address student) external view returns (uint256 credits);
 
     /// @notice Returns the address of the central University Core contract orchestrating this module.
-    /// @return The address of the Core contract.
-    function getUniversityCoreContract() external view returns (address);
+    /// @return coreAddress The contract address of UniversityCore.
+    function getUniversityCoreContract() external view returns (address coreAddress);
 
-    /// @notice Retrieves a specific grade record for a student.
+    /// @notice Retrieves a specific grade record for a student in a given subject.
     /// @param student The address of the student.
     /// @param subjectId The ID of the subject queried.
-    /// @return grade The numeric grade received.
-    /// @return timestamp The exact time the grade was recorded.
+    /// @return grade The numeric grade received (1-10, 0 if ungraded).
+    /// @return timestamp The exact block timestamp the grade was recorded.
     /// @return professor The address of the professor who graded the student.
     function getStudentGradeRecordOfSubject(address student, uint256 subjectId)
         external
         view
         returns (uint8 grade, uint256 timestamp, address professor);
 
-    /// @notice Computes the overall weighted average grade for a student based on their recorded grades and ECTS credits.
-    /// @dev Uses a precision multiplier (e.g., 100) to represent decimals as integers.
+    /// @notice Computes the overall weighted average grade for a student based on all recorded grades and ECTS credits.
+    /// @dev Uses a precision multiplier (100) to represent decimals as integers (e.g., 9.50 returned as 950).
     /// @param student The address of the student to calculate the average for.
-    /// @return average The calculated weighted average.
+    /// @return average The calculated weighted average scaled by the precision factor.
     function getWeightedAverage(address student) external view returns (uint256 average);
 }

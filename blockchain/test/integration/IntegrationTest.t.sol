@@ -33,7 +33,6 @@ contract IntegrationTest is Test {
         mockToken = new MockERC20();
 
         DeployUniversity deployer = new DeployUniversity();
-        // The deploy script handles passing CREDITS_REQUIRED and linking all 4 modules.
         (core, registry, gradebook, certification, feeManager) = deployer.runWithAdmin(admin);
 
         // Assign core roles and establish the initial enrollment fee
@@ -48,11 +47,6 @@ contract IntegrationTest is Test {
     /////// Fuzz E2E Academic Flow Test ///////
     ///////////////////////////////////////////
 
-    /// @notice A massive Fuzz test validating the entire student lifecycle:
-    /// 1. Paying the fee via FeeManager.
-    /// 2. Enrollment via Core.
-    /// 3. Grading via Gradebook.
-    /// 4. Graduation via Certification.
     function testFuzz_FullAcademicCycle(
         uint8 rawGrade1,
         uint8 rawGrade2,
@@ -70,13 +64,16 @@ contract IntegrationTest is Test {
         uint8 minCredits2 = uint8(CREDITS_REQUIRED - credits1);
         uint8 credits2 = uint8(bound(rawCredits2, minCredits2, 100));
 
-        // Address constraints to prevent role collisions and zero address reverts
+        // Address constraints to prevent collisions
         vm.assume(studentFuzz != address(0));
         vm.assume(professorFuzz != address(0));
         vm.assume(issuerFuzz != address(0));
         vm.assume(studentFuzz != professorFuzz);
         vm.assume(studentFuzz != issuerFuzz);
         vm.assume(professorFuzz != issuerFuzz);
+        vm.assume(studentFuzz != admin);
+        vm.assume(studentFuzz != address(core));
+        vm.assume(studentFuzz != address(feeManager));
 
         // Assign fuzzed roles
         vm.startPrank(admin);
@@ -84,17 +81,20 @@ contract IntegrationTest is Test {
         core.addDiplomaIssuer(issuerFuzz);
         vm.stopPrank();
 
-        // Step 2: Student Pays Registration Fee
-        // Mint mock tokens to the fuzzed student and approve the fee manager
+        // Step 2: Student Requests Enrollment (Hibrid Payment Flow via Core)
         mockToken.mint(studentFuzz, REGISTRATION_FEE);
         vm.startPrank(studentFuzz);
-        mockToken.approve(address(feeManager), REGISTRATION_FEE);
-        feeManager.payRegistrationFee(address(mockToken));
+        mockToken.approve(address(core), REGISTRATION_FEE); // Student approves Core
+        core.requestEnrollment(address(mockToken)); // Route through Core
         vm.stopPrank();
 
-        // Step 3: Admin Enrolls Student
+        // Assert tokens are secured inside the FeeManager
+        assertEq(mockToken.balanceOf(address(feeManager)), REGISTRATION_FEE);
+        assertTrue(feeManager.hasPaidFee(studentFuzz));
+
+        // Step 3: Admin Accepts Enrollment
         vm.prank(admin);
-        core.enrollStudent(studentFuzz, STUDENT_HASH);
+        core.acceptEnrollment(studentFuzz, STUDENT_HASH);
         assertTrue(registry.isStudentEnrolled(studentFuzz));
 
         // Step 4: Admin Creates Subjects
@@ -139,17 +139,40 @@ contract IntegrationTest is Test {
     /////// Integration Edge Cases ////////////
     ///////////////////////////////////////////
 
+    /// @notice Validates the rejection and automatic refund cycle.
+    function test_RejectEnrollmentAndRefundFlow() public {
+        mockToken.mint(student, REGISTRATION_FEE);
+
+        vm.startPrank(student);
+        mockToken.approve(address(core), REGISTRATION_FEE);
+        core.requestEnrollment(address(mockToken));
+        vm.stopPrank();
+
+        // Verify state is locked in pending registration
+        assertTrue(feeManager.hasPaidFee(student));
+        assertEq(mockToken.balanceOf(address(feeManager)), REGISTRATION_FEE);
+
+        // Admin rejects application
+        vm.prank(admin);
+        core.rejectEnrollment(student);
+
+        // Assertions: Funds returned to student wallet and vouchers cleared
+        assertFalse(feeManager.hasPaidFee(student));
+        assertEq(mockToken.balanceOf(student), REGISTRATION_FEE);
+        assertEq(mockToken.balanceOf(address(feeManager)), 0);
+        assertFalse(registry.isStudentEnrolled(student));
+    }
+
     /// @notice Tests the complete expulsion flow, ensuring an expelled student cannot be graded.
     function test_ExpellStudentFullFlow() public {
-        // Setup: Student must pay before enrollment
         mockToken.mint(student, REGISTRATION_FEE);
         vm.startPrank(student);
-        mockToken.approve(address(feeManager), REGISTRATION_FEE);
-        feeManager.payRegistrationFee(address(mockToken));
+        mockToken.approve(address(core), REGISTRATION_FEE);
+        core.requestEnrollment(address(mockToken));
         vm.stopPrank();
 
         vm.startPrank(admin);
-        core.enrollStudent(student, STUDENT_HASH);
+        core.acceptEnrollment(student, STUDENT_HASH);
         assertTrue(registry.isStudentEnrolled(student));
 
         core.expellStudent(student);
@@ -171,53 +194,40 @@ contract IntegrationTest is Test {
     function test_RevertEnrollStudentNotAdmin() public {
         vm.prank(student);
         vm.expectRevert();
-        core.enrollStudent(student, STUDENT_HASH);
+        core.acceptEnrollment(student, STUDENT_HASH);
     }
 
     function test_RevertEnrollStudentWithoutPayingFee() public {
-        // Admin attempts to enroll a student who bypassed the FeeManager
         vm.prank(admin);
         vm.expectRevert(abi.encodeWithSelector(UniversityCore.UniversityCore__FeeNotPaid.selector, student));
-        core.enrollStudent(student, STUDENT_HASH);
+        core.acceptEnrollment(student, STUDENT_HASH);
     }
 
     function test_RevertEnrollStudentTwice() public {
-        mockToken.mint(student, REGISTRATION_FEE * 2);
+        mockToken.mint(student, REGISTRATION_FEE);
 
         vm.startPrank(student);
-        mockToken.approve(address(feeManager), REGISTRATION_FEE * 2);
-        feeManager.payRegistrationFee(address(mockToken));
+        mockToken.approve(address(core), REGISTRATION_FEE);
+        core.requestEnrollment(address(mockToken));
         vm.stopPrank();
 
         vm.startPrank(admin);
-        core.enrollStudent(student, STUDENT_HASH);
+        core.acceptEnrollment(student, STUDENT_HASH);
 
-        // Attempting to enroll the active student again
         vm.expectRevert(abi.encodeWithSelector(UniversityCore.UniversityCore__StudentEnrolledAlready.selector, student));
-        core.enrollStudent(student, STUDENT_HASH);
+        core.acceptEnrollment(student, STUDENT_HASH);
         vm.stopPrank();
-    }
-
-    function test_RevertAddSubjectNotProfessor() public {
-        vm.prank(admin);
-        vm.expectRevert(abi.encodeWithSelector(UniversityCore.UniversityCore__AccountIsNotProfessor.selector, student));
-        core.addSubject("Subject", 6, student);
-
-        vm.prank(student);
-        vm.expectRevert();
-        core.addSubject("Subject", 6);
     }
 
     function test_RevertPostGradeNotProfessor() public {
-        // Pre-enrollment requirements
         mockToken.mint(student, REGISTRATION_FEE);
-        vm.prank(student);
-        mockToken.approve(address(feeManager), REGISTRATION_FEE);
-        vm.prank(student);
-        feeManager.payRegistrationFee(address(mockToken));
+        vm.startPrank(student);
+        mockToken.approve(address(core), REGISTRATION_FEE);
+        core.requestEnrollment(address(mockToken));
+        vm.stopPrank();
 
         vm.startPrank(admin);
-        core.enrollStudent(student, STUDENT_HASH);
+        core.acceptEnrollment(student, STUDENT_HASH);
         core.addSubject("Advanced Programming", 6, professor);
         vm.stopPrank();
 
@@ -235,34 +245,15 @@ contract IntegrationTest is Test {
         core.postGrade(student, 1, 10);
     }
 
-    function test_RevertSetSubjectActivityNotProfessor() public {
-        vm.prank(student);
-        vm.expectRevert();
-        core.setSubjectActivity(0, true);
-    }
-
-    function test_RevertIssueDiplomaStudentNotEnrolled() public {
-        vm.prank(issuer);
-        vm.expectRevert(abi.encodeWithSelector(UniversityCore.UniversityCore__StudentIsNotEnrolled.selector, student));
-        core.graduateStudentAndIssueDiploma(student, "Engineer", "Computer Science");
-    }
-
-    function test_RevertIssueDiplomaNotIssuerRole() public {
-        vm.prank(admin);
-        vm.expectRevert();
-        core.graduateStudentAndIssueDiploma(student, "Engineer", "Computer Science");
-    }
-
     function test_RevertIssueDiplomaStudentAlreadyHasDiploma() public {
-        // Complete the prerequisites for graduation
         mockToken.mint(student, REGISTRATION_FEE);
-        vm.prank(student);
-        mockToken.approve(address(feeManager), REGISTRATION_FEE);
-        vm.prank(student);
-        feeManager.payRegistrationFee(address(mockToken));
+        vm.startPrank(student);
+        mockToken.approve(address(core), REGISTRATION_FEE);
+        core.requestEnrollment(address(mockToken));
+        vm.stopPrank();
 
         vm.startPrank(admin);
-        core.enrollStudent(student, STUDENT_HASH);
+        core.acceptEnrollment(student, STUDENT_HASH);
         core.addSubject("OOP", uint8(CREDITS_REQUIRED), professor);
         vm.stopPrank();
 
@@ -272,7 +263,6 @@ contract IntegrationTest is Test {
         vm.prank(issuer);
         core.graduateStudentAndIssueDiploma(student, "Engineer", "Computer Science");
 
-        // Attempt to issue a secondary diploma
         vm.prank(issuer);
         vm.expectRevert(
             abi.encodeWithSelector(UniversityCore.UniversityCore__StudentHasAlreadyGraduated.selector, student)

@@ -3,6 +3,7 @@ pragma solidity ^0.8.25;
 
 /// @title Interface for University Certifications
 /// @notice Manages the issuance of final academic diplomas as Soulbound Tokens (SBTs).
+/// @dev Implemented by the Certification contract to archive immutable academic achievements.
 interface ICertification {
     /// @dev Core data structure defining the details of an issued diploma.
     struct Diploma {
@@ -30,22 +31,25 @@ interface ICertification {
     /// @notice Returns the full details of a specific diploma by its Token ID.
     /// @param tokenId The Soulbound NFT token identifier of the diploma.
     /// @return finalAverage The stored weighted average.
-    /// @return issueTimestamp The exact time of issuance.
-    /// @return degreeTitle The title of the degree.
-    /// @return major The field of study.
-    function getDiplomaMetadata(uint256 tokenId) external view returns (uint256, uint256, string memory, string memory);
+    /// @return issueTimestamp The exact block timestamp of issuance.
+    /// @return degreeTitle The customized title of the degree.
+    /// @return major The academic field of study.
+    function getDiplomaMetadata(uint256 tokenId)
+        external
+        view
+        returns (uint256 finalAverage, uint256 issueTimestamp, string memory degreeTitle, string memory major);
 
     /// @notice Finds the Token ID of the diploma belonging to a specific student.
     /// @param student The wallet address of the graduate.
-    /// @return The Token ID associated with the student's diploma.
-    function getDiplomaIdForStudent(address student) external view returns (uint256);
+    /// @return tokenId The Token ID associated with the student's diploma.
+    function getDiplomaIdForStudent(address student) external view returns (uint256 tokenId);
 
     /// @notice Returns the address of the central University Core contract orchestrating this module.
-    /// @return The address of the Core contract.
-    function getUniversityCoreContract() external view returns (address);
+    /// @return coreAddress The address of the Core contract.
+    function getUniversityCoreContract() external view returns (address coreAddress);
 
     /// @notice Checks if a specific address has been issued a diploma.
     /// @param student The wallet address to query.
-    /// @return True if the address owns a diploma SBT, false otherwise.
-    function hasDiploma(address student) external view returns (bool);
+    /// @return holdsDiploma True if the address owns a diploma SBT, false otherwise.
+    function hasDiploma(address student) external view returns (bool holdsDiploma);
 }

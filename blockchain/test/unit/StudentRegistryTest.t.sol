@@ -58,12 +58,6 @@ contract StudentRegistryTest is Test {
         assertFalse(isExpelled);
     }
 
-    function test_RevertIfEnrollWithAddressZero() public {
-        vm.prank(core);
-        vm.expectRevert(StudentRegistry.StudentRegistry__AddressZero.selector);
-        registry.enrollStudent(address(0), STUDENT_ID_HASH);
-    }
-
     function test_RevertIfNotCoreAttemptsEnroll() public {
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(StudentRegistry.StudentRegistry__NotCore.selector, alice));

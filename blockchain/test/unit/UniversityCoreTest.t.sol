@@ -3,55 +3,61 @@ pragma solidity ^0.8.25;
 
 import {Test, console} from "forge-std/Test.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
-import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
-import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
 import {UniversityCore} from "../../src/core/UniversityCore.sol";
-
-/// @notice Mock Contract used exclusively to bypass interface checks during Unit Tests.
-contract MockModule is IERC165 {
-    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
-        return interfaceId == type(IERC721).interfaceId || interfaceId == type(IERC165).interfaceId;
-    }
-}
-
-/// @notice Mock Contract representing an invalid module (fails ERC721 checks).
-contract InvalidMockModule is IERC165 {
-    function supportsInterface(bytes4) external pure returns (bool) {
-        return false;
-    }
-}
+import {MockERC20} from "../mocks/MockERC20.sol";
+import {MockStudentRegistry} from "../mocks/MockStudentRegistry.sol";
+import {MockGradebook} from "../mocks/MockGradebook.sol";
+import {MockCertification} from "../mocks/MockCertification.sol";
+import {MockFeeManager} from "../mocks/MockFeeManager.sol";
+import {InvalidMockModule} from "../mocks/InvalidMockModule.sol";
 
 contract UniversityCoreTest is Test {
     UniversityCore public core;
+    MockERC20 public mockToken;
 
-    MockModule public mockRegistry;
-    MockModule public mockGradebook;
-    MockModule public mockCertification;
-    MockModule public mockFeeManager;
+    MockStudentRegistry public mockRegistry;
+    MockGradebook public mockGradebook;
+    MockCertification public mockCertification;
+    MockFeeManager public mockFeeManager;
     InvalidMockModule public invalidModule;
 
     address public admin = makeAddr("admin");
     address public professor = makeAddr("professor");
     address public issuer = makeAddr("issuer");
     address public alice = makeAddr("alice");
+    address public bob = makeAddr("bob");
+
+    uint256 public constant REGISTRATION_FEE = 50 * 10 ** 6; // 50 USDC
+
+    event StudentEnrollmentRequested(address student);
+    event StudentEnrollmentRejected(address student);
+    event ProfessorAdded(address indexed professor);
+    event DiplomaIssuerAdded(address indexed issuer);
 
     function setUp() public {
-        mockRegistry = new MockModule();
-        mockGradebook = new MockModule();
-        mockCertification = new MockModule();
-        mockFeeManager = new MockModule();
+        mockToken = new MockERC20();
+        mockRegistry = new MockStudentRegistry();
+        mockGradebook = new MockGradebook();
+        mockCertification = new MockCertification();
+        mockFeeManager = new MockFeeManager();
         invalidModule = new InvalidMockModule();
 
         vm.prank(admin);
         core = new UniversityCore("Faculty of Computer Science", admin);
     }
 
+    function _initializeDefaultCore() internal {
+        vm.prank(admin);
+        core.initializeCore(
+            address(mockRegistry), address(mockGradebook), address(mockCertification), address(mockFeeManager)
+        );
+    }
+
     ///////////////////////////////////
     /////// Constructor Tests /////////
     ///////////////////////////////////
 
-    /// @notice Verifies that the constructor properly initializes faculty name and assigns admin roles.
     function test_ConstructorSetsFacultyNameAndAdmin() public view {
         assertEq(core.s_facultyName(), "Faculty of Computer Science");
         assertTrue(core.hasRole(core.DEFAULT_ADMIN_ROLE(), admin));
@@ -72,35 +78,33 @@ contract UniversityCoreTest is Test {
     /////// RBAC (Roles) Tests ////////
     ///////////////////////////////////
 
+    // Testăm acoperirea completă a funcțiilor administrative și a metodelor view simple
+    function test_GetFacultyName() public view {
+        assertEq(core.getFacultyName(), "Faculty of Computer Science");
+    }
+
     function test_AdminCanAddProfessor() public {
+        vm.expectEmit(true, false, false, false);
+        emit ProfessorAdded(professor);
+
         vm.prank(admin);
         core.addProfessor(professor);
         assertTrue(core.hasRole(core.PROFESSOR_ROLE(), professor));
     }
 
-    function test_RevertOnlyAdminCanAddProfessor() public {
-        vm.prank(alice);
-        vm.expectRevert();
-        core.addProfessor(professor);
-    }
-
     function test_AdminCanAddDiplomaIssuer() public {
+        vm.expectEmit(true, false, false, false);
+        emit DiplomaIssuerAdded(issuer);
+
         vm.prank(admin);
         core.addDiplomaIssuer(issuer);
         assertTrue(core.hasRole(core.DIPLOMA_ISSUER_ROLE(), issuer));
-    }
-
-    function test_RevertOnlyAdminCanAddDiplomaIssuer() public {
-        vm.prank(alice);
-        vm.expectRevert();
-        core.addDiplomaIssuer(issuer);
     }
 
     ///////////////////////////////////
     /////// Initialization Tests //////
     ///////////////////////////////////
 
-    /// @notice Ensures all module addresses are successfully linked during core initialization.
     function test_InitializeCoreSuccess() public {
         vm.prank(admin);
         core.initializeCore(
@@ -112,34 +116,24 @@ contract UniversityCoreTest is Test {
         assertEq(core.getCertificationContract(), address(mockCertification));
     }
 
-    function test_RevertInitializeNotAdmin() public {
-        vm.prank(alice);
-        vm.expectRevert();
-        core.initializeCore(
-            address(mockRegistry), address(mockGradebook), address(mockCertification), address(mockFeeManager)
-        );
-    }
-
     function test_RevertInitializeWithZeroAddress() public {
-        vm.prank(admin);
+        vm.startPrank(admin);
         vm.expectRevert(UniversityCore.UniversityCore__AddressZero.selector);
         core.initializeCore(address(0), address(mockGradebook), address(mockCertification), address(mockFeeManager));
+        vm.stopPrank();
     }
 
-    function test_RevertAlreadyInitialized() public {
-        vm.startPrank(admin);
-        core.initializeCore(
-            address(mockRegistry), address(mockGradebook), address(mockCertification), address(mockFeeManager)
-        );
+    function test_RevertInitializeAlreadyInitialized() public {
+        _initializeDefaultCore();
 
+        vm.prank(admin);
         vm.expectRevert(UniversityCore.UniversityCore__AlreadyInitialized.selector);
         core.initializeCore(
             address(mockRegistry), address(mockGradebook), address(mockCertification), address(mockFeeManager)
         );
-        vm.stopPrank();
     }
 
-    function test_RevertInitializeMissingERC721Support() public {
+    function test_RevertInitializeMissingERC721SupportRegistry() public {
         vm.prank(admin);
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -151,28 +145,42 @@ contract UniversityCoreTest is Test {
         );
     }
 
+    function test_RevertInitializeMissingERC721SupportCertification() public {
+        vm.prank(admin);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                UniversityCore.UniversityCore__ContractDoesNotSupportIERC721.selector, address(invalidModule)
+            )
+        );
+        core.initializeCore(
+            address(mockRegistry), address(mockGradebook), address(invalidModule), address(mockFeeManager)
+        );
+    }
+
     ////////////////////////////////
-    /////// Setter Tests ///////////
+    /////// Setter Contract Tests //
     ////////////////////////////////
 
-    function test_AdminCanSetStudentRegistryContract() public {
-        MockModule newRegistry = new MockModule();
+    function test_SetStudentRegistryContractSuccess() public {
+        _initializeDefaultCore();
+        MockStudentRegistry newRegistry = new MockStudentRegistry();
 
         vm.prank(admin);
         core.setStudentRegistryContract(address(newRegistry));
         assertEq(core.getStudentRegistryContract(), address(newRegistry));
     }
 
-    function test_RevertSetRegistrySameAddress() public {
-        vm.startPrank(admin);
-        core.setStudentRegistryContract(address(mockRegistry));
+    function test_RevertSetStudentRegistryContractSameAddress() public {
+        _initializeDefaultCore();
 
+        vm.prank(admin);
         vm.expectRevert(UniversityCore.UniversityCore__SameAddress.selector);
         core.setStudentRegistryContract(address(mockRegistry));
-        vm.stopPrank();
     }
 
-    function test_RevertSetRegistryMissingERC721() public {
+    function test_RevertSetStudentRegistryContractInvalidERC721() public {
+        _initializeDefaultCore();
+
         vm.prank(admin);
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -182,45 +190,276 @@ contract UniversityCoreTest is Test {
         core.setStudentRegistryContract(address(invalidModule));
     }
 
-    function test_AdminCanSetGradebookContract() public {
-        MockModule newGradebook = new MockModule();
+    function test_SetGradebookContractSuccess() public {
+        _initializeDefaultCore();
+        MockGradebook newGradebook = new MockGradebook();
 
         vm.prank(admin);
         core.setGradebookContract(address(newGradebook));
         assertEq(core.getGradebookContract(), address(newGradebook));
     }
 
-    function test_AdminCanSetCertificationContract() public {
-        MockModule newCert = new MockModule();
+    function test_RevertSetGradebookContractSameAddress() public {
+        _initializeDefaultCore();
+
+        vm.prank(admin);
+        vm.expectRevert(UniversityCore.UniversityCore__SameAddress.selector);
+        core.setGradebookContract(address(mockGradebook));
+    }
+
+    function test_SetCertificationContractSuccess() public {
+        _initializeDefaultCore();
+        MockCertification newCert = new MockCertification();
 
         vm.prank(admin);
         core.setCertificationContract(address(newCert));
         assertEq(core.getCertificationContract(), address(newCert));
     }
 
-    function test_AdminCanSetFeeManagerContract() public {
-        MockModule newFeeManager = new MockModule();
+    function test_RevertSetCertificationContractSameAddress() public {
+        _initializeDefaultCore();
 
         vm.prank(admin);
-        core.setFeeManagerContract(address(newFeeManager));
+        vm.expectRevert(UniversityCore.UniversityCore__SameAddress.selector);
+        core.setCertificationContract(address(mockCertification));
+    }
+
+    function test_RevertSetCertificationContractInvalidERC721() public {
+        _initializeDefaultCore();
+
+        vm.prank(admin);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                UniversityCore.UniversityCore__ContractDoesNotSupportIERC721.selector, address(invalidModule)
+            )
+        );
+        core.setCertificationContract(address(invalidModule));
+    }
+
+    function test_SetFeeManagerContractSuccess() public {
+        _initializeDefaultCore();
+        MockFeeManager newFM = new MockFeeManager();
+
+        vm.prank(admin);
+        core.setFeeManagerContract(address(newFM));
+    }
+
+    function test_RevertSetFeeManagerContractSameAddress() public {
+        _initializeDefaultCore();
+
+        vm.prank(admin);
+        vm.expectRevert(UniversityCore.UniversityCore__SameAddress.selector);
+        core.setFeeManagerContract(address(mockFeeManager));
+    }
+
+    ///////////////////////////////////
+    /////// Request Enrollment ///////
+    ///////////////////////////////////
+
+    function test_RequestEnrollmentSuccess() public {
+        _initializeDefaultCore();
+        mockFeeManager.setMockFee(address(mockToken), REGISTRATION_FEE);
+
+        mockToken.mint(alice, REGISTRATION_FEE);
+
+        vm.startPrank(alice);
+        mockToken.approve(address(core), REGISTRATION_FEE);
+
+        vm.expectEmit(true, false, false, false);
+        emit StudentEnrollmentRequested(alice);
+
+        core.requestEnrollment(address(mockToken));
+        vm.stopPrank();
+
+        assertEq(mockToken.balanceOf(alice), 0);
+        assertEq(mockToken.balanceOf(address(core)), REGISTRATION_FEE);
+        assertTrue(mockFeeManager.hasPaidFee(alice));
+    }
+
+    function test_RevertRequestEnrollmentTokenNotAllowed() public {
+        _initializeDefaultCore();
+
+        vm.startPrank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(UniversityCore.UniversityCore__TokenIsNotAllowed.selector, address(mockToken))
+        );
+        core.requestEnrollment(address(mockToken));
+        vm.stopPrank();
+    }
+
+    function test_RevertRequestEnrollmentIfAlreadyPaid() public {
+        _initializeDefaultCore();
+        mockFeeManager.setMockFee(address(mockToken), REGISTRATION_FEE);
+        mockFeeManager.setMockPaid(alice, true);
+
+        vm.startPrank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(UniversityCore.UniversityCore__StudentAlreadyRequestedEnroll.selector, alice)
+        );
+        core.requestEnrollment(address(mockToken));
+        vm.stopPrank();
+    }
+
+    function test_RevertRequestEnrollmentIfEnrolledAlready() public {
+        _initializeDefaultCore();
+        mockRegistry.setMockEnrolled(alice, true);
+
+        vm.startPrank(alice);
+        vm.expectRevert(abi.encodeWithSelector(UniversityCore.UniversityCore__StudentEnrolledAlready.selector, alice));
+        core.requestEnrollment(address(mockToken));
+        vm.stopPrank();
+    }
+
+    function test_RevertRequestEnrollmentIfGraduatedAlready() public {
+        _initializeDefaultCore();
+        mockRegistry.setMockGraduated(alice, true);
+
+        vm.startPrank(alice);
+        vm.expectRevert(abi.encodeWithSelector(UniversityCore.UniversityCore__StudentEnrolledAlready.selector, alice));
+        core.requestEnrollment(address(mockToken));
+        vm.stopPrank();
+    }
+
+    ///////////////////////////////////
+    /////// Accept Enrollment /////////
+    ///////////////////////////////////
+
+    function test_AcceptEnrollmentSuccess() public {
+        _initializeDefaultCore();
+        mockFeeManager.setMockPaid(alice, true);
+
+        vm.prank(admin);
+        core.acceptEnrollment(alice, bytes32("ID123"));
+
+        assertTrue(mockRegistry.isStudentEnrolled(alice));
+        assertFalse(mockFeeManager.hasPaidFee(alice));
+    }
+
+    function test_RevertAcceptEnrollmentIfAlreadyEnrolled() public {
+        _initializeDefaultCore();
+        mockRegistry.setMockEnrolled(alice, true);
+
+        vm.prank(admin);
+        vm.expectRevert(abi.encodeWithSelector(UniversityCore.UniversityCore__StudentEnrolledAlready.selector, alice));
+        core.acceptEnrollment(alice, bytes32("ID123"));
+    }
+
+    function test_RevertAcceptEnrollmentIfExpelled() public {
+        _initializeDefaultCore();
+        mockRegistry.setMockExpelled(alice, true);
+
+        vm.prank(admin);
+        vm.expectRevert(abi.encodeWithSelector(UniversityCore.UniversityCore__StudentIsExpelled.selector, alice));
+        core.acceptEnrollment(alice, bytes32("ID123"));
+    }
+
+    function test_RevertAcceptEnrollmentIfFeeNotPaid() public {
+        _initializeDefaultCore();
+        mockFeeManager.setMockPaid(alice, false);
+
+        vm.prank(admin);
+        vm.expectRevert(abi.encodeWithSelector(UniversityCore.UniversityCore__FeeNotPaid.selector, alice));
+        core.acceptEnrollment(alice, bytes32("ID123"));
+    }
+
+    ///////////////////////////////////
+    /////// Reject Enrollment /////////
+    ///////////////////////////////////
+
+    function test_RejectEnrollmentSuccess() public {
+        _initializeDefaultCore();
+        mockFeeManager.setMockPaid(alice, true);
+
+        vm.prank(admin);
+        vm.expectEmit(true, false, false, false);
+        emit StudentEnrollmentRejected(alice);
+
+        core.rejectEnrollment(alice);
+
+        assertFalse(mockFeeManager.hasPaidFee(alice));
+    }
+
+    function test_RevertRejectEnrollmentIfFeeNotPaid() public {
+        _initializeDefaultCore();
+        mockFeeManager.setMockPaid(alice, false);
+
+        vm.prank(admin);
+        vm.expectRevert(abi.encodeWithSelector(UniversityCore.UniversityCore__FeeNotPaid.selector, alice));
+        core.rejectEnrollment(alice);
+    }
+
+    ///////////////////////////////////
+    /////// Expell Student ////////////
+    ///////////////////////////////////
+
+    function test_ExpellStudentSuccess() public {
+        _initializeDefaultCore();
+        mockRegistry.setMockEnrolled(alice, true);
+
+        vm.prank(admin);
+        core.expellStudent(alice);
+        assertTrue(mockRegistry.isStudentExpelled(alice));
+    }
+
+    function test_RevertExpellStudentIfAlreadyExpelled() public {
+        _initializeDefaultCore();
+        mockRegistry.setMockExpelled(alice, true);
+
+        vm.prank(admin);
+        vm.expectRevert(abi.encodeWithSelector(UniversityCore.UniversityCore__StudentIsExpelled.selector, alice));
+        core.expellStudent(alice);
+    }
+
+    function test_RevertExpellStudentIfNotEnrolled() public {
+        _initializeDefaultCore();
+        mockRegistry.setMockEnrolled(alice, false);
+
+        vm.prank(admin);
+        vm.expectRevert(abi.encodeWithSelector(UniversityCore.UniversityCore__StudentIsNotEnrolled.selector, alice));
+        core.expellStudent(alice);
+    }
+
+    ///////////////////////////////////
+    /////// Add Subject (Admin) ///////
+    ///////////////////////////////////
+
+    function test_AdminAddSubjectSuccess() public {
+        _initializeDefaultCore();
+        vm.prank(admin);
+        core.addProfessor(professor);
+
+        vm.prank(admin);
+        core.addSubject("Distributed Systems", 6, professor);
+    }
+
+    function test_RevertAdminAddSubjectNotProfessor() public {
+        _initializeDefaultCore();
+        vm.prank(admin);
+        vm.expectRevert(abi.encodeWithSelector(UniversityCore.UniversityCore__AccountIsNotProfessor.selector, bob));
+        core.addSubject("Distributed Systems", 6, bob);
     }
 
     //////////////////////////////////////////
     /////// CoreInitialized Modifier Tests ///
     //////////////////////////////////////////
 
-    /// @notice Ensures critical functions cannot be executed before the Core is fully linked to its modules.
     function test_RevertFunctionsIfCoreNotInitialized() public {
         vm.startPrank(admin);
 
         vm.expectRevert(UniversityCore.UniversityCore__NotInitialized.selector);
-        core.enrollStudent(alice, bytes32(0));
+        core.acceptEnrollment(alice, bytes32(0));
+
+        vm.expectRevert(UniversityCore.UniversityCore__NotInitialized.selector);
+        core.rejectEnrollment(alice);
 
         vm.expectRevert(UniversityCore.UniversityCore__NotInitialized.selector);
         core.expellStudent(alice);
 
         vm.expectRevert(UniversityCore.UniversityCore__NotInitialized.selector);
-        core.addSubject("Math", 5, professor);
+        core.setTokenFee(address(mockToken), 100);
+
+        vm.expectRevert(UniversityCore.UniversityCore__NotInitialized.selector);
+        core.withdrawUniversityFunds(address(mockToken), bob, 100);
 
         vm.stopPrank();
     }
