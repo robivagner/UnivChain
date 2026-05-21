@@ -33,7 +33,7 @@ Follow these steps to initialize and build the environment:
 
 1. Clone the Repository:
 ```
-git clone <your-repo-url>
+git clone https://github.com/robivagner/UnivChain
 cd blockchain
 ```
 
@@ -70,58 +70,31 @@ forge coverage
 
 ---
 
-## Deployment Guide
+# Deployment Guide
 
 Deployment and contract linking are completely automated via Foundry Solidity scripting.
 
-1. Setup Environment Variables
+## 1. Setup Environment Variables
 Generate a .env file in the root of your blockchain/ directory and populate it with the following configuration:
 
-# Your deployment wallet private key
+Your deployment wallet private key
 ```
 PRIVATE_KEY="your_private_key_here"
 ```
 
-# Targeted EVM Network RPC Endpoint
+Targeted EVM Network RPC Endpoint
 ```
 RPC_URL="https://eth-sepolia.g.alchemy.com/v2/YOUR_ALCHEMY_KEY"
 ```
 
-2. Initialize Environment Variables
+## 2. Initialize Environment Variables
 ```
 source .env
 ```
 
-3. Broadcast the Protocol Deployment
+## 3. Broadcast the Protocol Deployment
 ```
 forge script script/DeployUniversity.s.sol:DeployUniversity --rpc-url $RPC_URL --broadcast
 ```
 
 ---
-
-## Step-by-Step User Guide (Protocol Lifecycle)
-
-### Phase 1: Institutional Initialization (Admin)
-* Access Control Assignment: The initial Deployer (Admin) grants systemic permissions to designated Ethereum addresses.
-* Treasury Configuration: The Admin defines the specific enrollment cost mapping to an approved ERC20 stablecoin.
-  Action: Execute setTokenFee(tokenAddress, feeAmount) on UniversityCore.
-
-### Phase 2: Student Admission & Identity (Student & Admin)
-* Registration Payment Submission (Student):
-  Action: The student invokes payRegistrationFee(tokenAddress) directly on the FeeManager contract.
-* On-Chain Enrollment Execution (Admin): The core consumes the voucher and issues the identity token.
-  Action: Admin executes enrollStudent(studentAddress, studentIdHash) on UniversityCore.
-
-### Phase 3: Active Academic Term (Professors)
-* Curriculum Creation:
-  Action: Admin or authorized Professor executes addSubject("Blockchain", 6, professorAddress) on UniversityCore.
-* Grade Registry Logging: Professors post grades scaled from 1 to 10.
-  Action: Professor executes postGrade(studentAddress, subjectId, grade) on UniversityCore.
-
-### Phase 4: Degree Certification & Graduation (Issuer / Secretariat)
-* Academic Verification Audit: Once a student profile successfully fulfills all required academic credit thresholds.
-  Action: The designated Diploma Issuer calls graduateStudentAndIssueDiploma(studentAddress, "B.Sc. Engineer", "Computer Science") on UniversityCore.
-
-### Phase 5: Financial Treasury Management (Admin)
-* Asset Liquidation Extraction: The administrative body can dynamically sweep accumulated registration stablecoins.
-  Action: Admin executes withdrawUniversityFunds(tokenAddress, destinationWallet, amount) on UniversityCore.
