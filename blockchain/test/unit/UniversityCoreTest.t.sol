@@ -11,6 +11,7 @@ import {MockGradebook} from "../mocks/MockGradebook.sol";
 import {MockCertification} from "../mocks/MockCertification.sol";
 import {MockFeeManager} from "../mocks/MockFeeManager.sol";
 import {InvalidMockModule} from "../mocks/InvalidMockModule.sol";
+import {MockERC721OnlyModule} from "../mocks/MockERC721OnlyModule.sol";
 
 contract UniversityCoreTest is Test {
     UniversityCore public core;
@@ -21,6 +22,7 @@ contract UniversityCoreTest is Test {
     MockCertification public mockCertification;
     MockFeeManager public mockFeeManager;
     InvalidMockModule public invalidModule;
+    MockERC721OnlyModule public erc721OnlyModule;
 
     address public admin = makeAddr("admin");
     address public professor = makeAddr("professor");
@@ -42,6 +44,7 @@ contract UniversityCoreTest is Test {
         mockCertification = new MockCertification();
         mockFeeManager = new MockFeeManager();
         invalidModule = new InvalidMockModule();
+        erc721OnlyModule = new MockERC721OnlyModule();
 
         vm.prank(admin);
         core = new UniversityCore("Faculty of Computer Science", admin);
@@ -157,99 +160,28 @@ contract UniversityCoreTest is Test {
         );
     }
 
-    ////////////////////////////////
-    /////// Setter Contract Tests //
-    ////////////////////////////////
-
-    function test_SetStudentRegistryContractSuccess() public {
-        _initializeDefaultCore();
-        MockStudentRegistry newRegistry = new MockStudentRegistry();
-
-        vm.prank(admin);
-        core.setStudentRegistryContract(address(newRegistry));
-        assertEq(core.getStudentRegistryContract(), address(newRegistry));
-    }
-
-    function test_RevertSetStudentRegistryContractSameAddress() public {
-        _initializeDefaultCore();
-
-        vm.prank(admin);
-        vm.expectRevert(UniversityCore.UniversityCore__SameAddress.selector);
-        core.setStudentRegistryContract(address(mockRegistry));
-    }
-
-    function test_RevertSetStudentRegistryContractInvalidERC721() public {
-        _initializeDefaultCore();
-
+    function test_RevertInitializeMissingERC5192SupportRegistry() public {
         vm.prank(admin);
         vm.expectRevert(
             abi.encodeWithSelector(
-                UniversityCore.UniversityCore__ContractDoesNotSupportIERC721.selector, address(invalidModule)
+                UniversityCore.UniversityCore__ContractDoesNotSupportIERC5192.selector, address(erc721OnlyModule)
             )
         );
-        core.setStudentRegistryContract(address(invalidModule));
+        core.initializeCore(
+            address(erc721OnlyModule), address(mockGradebook), address(mockCertification), address(mockFeeManager)
+        );
     }
 
-    function test_SetGradebookContractSuccess() public {
-        _initializeDefaultCore();
-        MockGradebook newGradebook = new MockGradebook();
-
-        vm.prank(admin);
-        core.setGradebookContract(address(newGradebook));
-        assertEq(core.getGradebookContract(), address(newGradebook));
-    }
-
-    function test_RevertSetGradebookContractSameAddress() public {
-        _initializeDefaultCore();
-
-        vm.prank(admin);
-        vm.expectRevert(UniversityCore.UniversityCore__SameAddress.selector);
-        core.setGradebookContract(address(mockGradebook));
-    }
-
-    function test_SetCertificationContractSuccess() public {
-        _initializeDefaultCore();
-        MockCertification newCert = new MockCertification();
-
-        vm.prank(admin);
-        core.setCertificationContract(address(newCert));
-        assertEq(core.getCertificationContract(), address(newCert));
-    }
-
-    function test_RevertSetCertificationContractSameAddress() public {
-        _initializeDefaultCore();
-
-        vm.prank(admin);
-        vm.expectRevert(UniversityCore.UniversityCore__SameAddress.selector);
-        core.setCertificationContract(address(mockCertification));
-    }
-
-    function test_RevertSetCertificationContractInvalidERC721() public {
-        _initializeDefaultCore();
-
+    function test_RevertInitializeMissingERC5192SupportCertification() public {
         vm.prank(admin);
         vm.expectRevert(
             abi.encodeWithSelector(
-                UniversityCore.UniversityCore__ContractDoesNotSupportIERC721.selector, address(invalidModule)
+                UniversityCore.UniversityCore__ContractDoesNotSupportIERC5192.selector, address(erc721OnlyModule)
             )
         );
-        core.setCertificationContract(address(invalidModule));
-    }
-
-    function test_SetFeeManagerContractSuccess() public {
-        _initializeDefaultCore();
-        MockFeeManager newFM = new MockFeeManager();
-
-        vm.prank(admin);
-        core.setFeeManagerContract(address(newFM));
-    }
-
-    function test_RevertSetFeeManagerContractSameAddress() public {
-        _initializeDefaultCore();
-
-        vm.prank(admin);
-        vm.expectRevert(UniversityCore.UniversityCore__SameAddress.selector);
-        core.setFeeManagerContract(address(mockFeeManager));
+        core.initializeCore(
+            address(mockRegistry), address(mockGradebook), address(erc721OnlyModule), address(mockFeeManager)
+        );
     }
 
     ///////////////////////////////////

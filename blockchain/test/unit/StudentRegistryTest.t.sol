@@ -4,6 +4,7 @@ pragma solidity ^0.8.25;
 import {Test} from "forge-std/Test.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import {IERC5192} from "../../src/interfaces/IERC5192.sol";
 import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 
 import {StudentRegistry} from "../../src/modules/StudentRegistry.sol";
@@ -95,8 +96,27 @@ contract StudentRegistryTest is Test {
 
     function test_RevertIfGraduatingNonExistentStudent() public {
         vm.prank(core);
-        vm.expectRevert(abi.encodeWithSelector(StudentRegistry.StudentRegistry__InvalidTokenId.selector, 0));
+        vm.expectRevert(abi.encodeWithSelector(StudentRegistry.StudentRegistry__StudentNotEnrolled.selector, alice));
         registry.graduateStudent(alice);
+    }
+
+    function test_RevertIfEnrollingAlreadyEnrolledStudent() public {
+        vm.startPrank(core);
+        registry.enrollStudent(student, STUDENT_ID_HASH);
+
+        vm.expectRevert(abi.encodeWithSelector(StudentRegistry.StudentRegistry__StudentAlreadyEnrolled.selector, student));
+        registry.enrollStudent(student, STUDENT_ID_HASH);
+        vm.stopPrank();
+    }
+
+    function test_RevertIfReEnrollingExpelledStudent() public {
+        vm.startPrank(core);
+        registry.enrollStudent(student, STUDENT_ID_HASH);
+        registry.expellStudent(student);
+
+        vm.expectRevert(abi.encodeWithSelector(StudentRegistry.StudentRegistry__StudentIsExpelled.selector, student));
+        registry.enrollStudent(student, STUDENT_ID_HASH);
+        vm.stopPrank();
     }
 
     function test_RevertIfNotCoreAttemptsGraduate() public {
@@ -131,7 +151,7 @@ contract StudentRegistryTest is Test {
 
     function test_RevertIfExpellingNonExistentStudent() public {
         vm.prank(core);
-        vm.expectRevert(abi.encodeWithSelector(StudentRegistry.StudentRegistry__InvalidTokenId.selector, 0));
+        vm.expectRevert(abi.encodeWithSelector(StudentRegistry.StudentRegistry__StudentNotEnrolled.selector, alice));
         registry.expellStudent(alice);
     }
 
@@ -178,7 +198,18 @@ contract StudentRegistryTest is Test {
     function test_SupportsInterfaceERC721andERC165() public view {
         assertTrue(registry.supportsInterface(type(IERC721).interfaceId));
         assertTrue(registry.supportsInterface(type(IERC165).interfaceId));
+        assertTrue(registry.supportsInterface(0xb45a3c0e));
         assertFalse(registry.supportsInterface(0xffffffff));
+    }
+
+    function test_EnrollEmitsLockedEvent() public {
+        vm.expectEmit(true, false, false, true);
+        emit IERC5192.Locked(1);
+
+        vm.prank(core);
+        registry.enrollStudent(student, STUDENT_ID_HASH);
+
+        assertTrue(registry.locked(1));
     }
 
     ///////////////////////////////////

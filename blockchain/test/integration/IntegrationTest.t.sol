@@ -10,6 +10,8 @@ import {StudentRegistry} from "../../src/modules/StudentRegistry.sol";
 import {Gradebook} from "../../src/modules/Gradebook.sol";
 import {Certification} from "../../src/modules/Certification.sol";
 import {FeeManager} from "../../src/modules/FeeManager.sol";
+import {ICertification} from "../../src/interfaces/ICertification.sol";
+import {Certification} from "../../src/modules/Certification.sol";
 import {MockERC20} from "../mocks/MockERC20.sol";
 
 contract IntegrationTest is Test {
@@ -26,8 +28,12 @@ contract IntegrationTest is Test {
     address public student = makeAddr("student");
 
     bytes32 constant STUDENT_HASH = keccak256(abi.encode("RO-1234"));
+    bytes32 constant DIPLOMA_DOC_HASH = keccak256("integration-diploma-pdf");
+    string constant DIPLOMA_META_URI = "ipfs://QmIntegrationTest/diploma.json";
     uint256 constant CREDITS_REQUIRED = 180;
     uint256 constant REGISTRATION_FEE = 10 * 10 ** 6; // 10 USDC
+    uint8 constant SUBJECT_ECTS = 30;
+    uint8 constant SUBJECTS_FOR_GRADUATION = 6;
 
     function setUp() public {
         mockToken = new MockERC20();
@@ -47,22 +53,28 @@ contract IntegrationTest is Test {
     /////// Fuzz E2E Academic Flow Test ///////
     ///////////////////////////////////////////
 
+    /// @dev Adds six 30-ECTS subjects and passing grades (180 total), matching Gradebook per-subject limits.
+    function _completeCurriculumForGraduation(address who, address prof, uint8 grade) internal {
+        vm.startPrank(admin);
+        for (uint8 i = 0; i < SUBJECTS_FOR_GRADUATION; i++) {
+            core.addSubject(string(abi.encodePacked("Course ", vm.toString(i))), SUBJECT_ECTS, prof);
+        }
+        vm.stopPrank();
+
+        vm.startPrank(prof);
+        for (uint256 subjectId = 1; subjectId <= SUBJECTS_FOR_GRADUATION; subjectId++) {
+            core.postGrade(who, subjectId, grade);
+        }
+        vm.stopPrank();
+    }
+
     function testFuzz_FullAcademicCycle(
-        uint8 rawGrade1,
-        uint8 rawGrade2,
-        uint8 rawCredits1,
-        uint8 rawCredits2,
+        uint8 rawGrade,
         address studentFuzz,
         address professorFuzz,
         address issuerFuzz
     ) public {
-        // Step 1: Input Bounds & Constraints
-        uint8 grade1 = uint8(bound(rawGrade1, 5, 10));
-        uint8 grade2 = uint8(bound(rawGrade2, 5, 10));
-        uint8 credits1 = uint8(bound(rawCredits1, 80, 120));
-
-        uint8 minCredits2 = uint8(CREDITS_REQUIRED - credits1);
-        uint8 credits2 = uint8(bound(rawCredits2, minCredits2, 100));
+        uint8 grade = uint8(bound(rawGrade, 5, 10));
 
         // Address constraints to prevent collisions
         vm.assume(studentFuzz != address(0));
@@ -97,24 +109,15 @@ contract IntegrationTest is Test {
         core.acceptEnrollment(studentFuzz, STUDENT_HASH);
         assertTrue(registry.isStudentEnrolled(studentFuzz));
 
-        // Step 4: Admin Creates Subjects
-        vm.startPrank(admin);
-        core.addSubject("Advanced Blockchain", credits1, professorFuzz);
-        core.addSubject("Cyber Security", credits2, professorFuzz);
-        vm.stopPrank();
+        _completeCurriculumForGraduation(studentFuzz, professorFuzz, grade);
 
-        // Step 5: Professor Posts Grades
-        vm.startPrank(professorFuzz);
-        core.postGrade(studentFuzz, 1, grade1);
-        core.postGrade(studentFuzz, 2, grade2);
-        vm.stopPrank();
-
-        uint256 expectedCredits = uint256(credits1) + uint256(credits2);
-        assertEq(gradebook.getStudentCredits(studentFuzz), expectedCredits);
+        assertEq(gradebook.getStudentCredits(studentFuzz), CREDITS_REQUIRED);
 
         // Step 6: Issuer Finalizes Studies
         vm.prank(issuerFuzz);
-        core.graduateStudentAndIssueDiploma(studentFuzz, "B.Sc. Engineer", "Computer Science");
+        core.graduateStudentAndIssueDiploma(
+            studentFuzz, "B.Sc. Engineer", "Computer Science", DIPLOMA_DOC_HASH, DIPLOMA_META_URI
+        );
 
         // Assertions: Identity burned, Diploma minted
         assertFalse(registry.isStudentEnrolled(studentFuzz));
@@ -123,16 +126,17 @@ contract IntegrationTest is Test {
 
         // Assertions: Metadata Integrity
         uint256 tokenId = certification.getDiplomaIdForStudent(studentFuzz);
-        uint256 expectedAvg =
-            (uint256(grade1) * uint256(credits1) + uint256(grade2) * uint256(credits2)) * 100 / expectedCredits;
+        ICertification.Diploma memory diploma = certification.getDiploma(tokenId);
 
-        (uint256 savedAvg, uint256 issueTime, string memory title, string memory major) =
-            certification.getDiplomaMetadata(tokenId);
-
-        assertEq(savedAvg, expectedAvg);
-        assertEq(title, "B.Sc. Engineer");
-        assertEq(major, "Computer Science");
-        assertEq(issueTime, block.timestamp);
+        assertEq(diploma.finalAverage, uint256(grade) * 100);
+        assertEq(diploma.totalCredits, CREDITS_REQUIRED);
+        assertEq(diploma.degreeTitle, "B.Sc. Engineer");
+        assertEq(diploma.major, "Computer Science");
+        assertEq(diploma.issueTimestamp, block.timestamp);
+        assertTrue(certification.isDiplomaValid(tokenId));
+        assertEq(certification.tokenURI(tokenId), DIPLOMA_META_URI);
+        assertEq(diploma.documentHash, DIPLOMA_DOC_HASH);
+        assertEq(diploma.issuer, address(core));
     }
 
     ///////////////////////////////////////////
@@ -252,21 +256,84 @@ contract IntegrationTest is Test {
         core.requestEnrollment(address(mockToken));
         vm.stopPrank();
 
-        vm.startPrank(admin);
+        vm.prank(admin);
         core.acceptEnrollment(student, STUDENT_HASH);
-        core.addSubject("OOP", uint8(CREDITS_REQUIRED), professor);
-        vm.stopPrank();
 
-        vm.prank(professor);
-        core.postGrade(student, 1, 10);
+        _completeCurriculumForGraduation(student, professor, 10);
 
         vm.prank(issuer);
-        core.graduateStudentAndIssueDiploma(student, "Engineer", "Computer Science");
+        core.graduateStudentAndIssueDiploma(
+            student, "Engineer", "Computer Science", DIPLOMA_DOC_HASH, DIPLOMA_META_URI
+        );
 
         vm.prank(issuer);
         vm.expectRevert(
             abi.encodeWithSelector(UniversityCore.UniversityCore__StudentHasAlreadyGraduated.selector, student)
         );
-        core.graduateStudentAndIssueDiploma(student, "Engineer", "Computer Science");
+        core.graduateStudentAndIssueDiploma(
+            student, "Engineer", "Computer Science", DIPLOMA_DOC_HASH, DIPLOMA_META_URI
+        );
+    }
+
+    function test_AdminRevokeDiplomaThroughCore() public {
+        mockToken.mint(student, REGISTRATION_FEE);
+        vm.startPrank(student);
+        mockToken.approve(address(core), REGISTRATION_FEE);
+        core.requestEnrollment(address(mockToken));
+        vm.stopPrank();
+
+        vm.prank(admin);
+        core.acceptEnrollment(student, STUDENT_HASH);
+
+        _completeCurriculumForGraduation(student, professor, 10);
+
+        vm.prank(issuer);
+        core.graduateStudentAndIssueDiploma(
+            student, "Engineer", "Computer Science", DIPLOMA_DOC_HASH, DIPLOMA_META_URI
+        );
+
+        uint256 tokenId = certification.getDiplomaIdForStudent(student);
+        assertTrue(certification.isDiplomaValid(tokenId));
+
+        vm.prank(admin);
+        core.revokeDiploma(tokenId);
+
+        assertFalse(certification.isDiplomaValid(tokenId));
+        assertTrue(certification.getDiploma(tokenId).revoked);
+    }
+
+    /// @notice If graduation policy fails at Certification, identity must remain active and no diploma minted.
+    function test_RevertGraduationInsufficientCreditsLeavesStudentEnrolled() public {
+        mockToken.mint(student, REGISTRATION_FEE);
+        vm.startPrank(student);
+        mockToken.approve(address(core), REGISTRATION_FEE);
+        core.requestEnrollment(address(mockToken));
+        vm.stopPrank();
+
+        vm.startPrank(admin);
+        core.acceptEnrollment(student, STUDENT_HASH);
+        core.addSubject("Intro", SUBJECT_ECTS, professor);
+        vm.stopPrank();
+
+        vm.prank(professor);
+        core.postGrade(student, 1, 10);
+
+        assertEq(gradebook.getStudentCredits(student), SUBJECT_ECTS);
+        assertLt(gradebook.getStudentCredits(student), CREDITS_REQUIRED);
+
+        vm.prank(issuer);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Certification.Certification__NotEnoughCredits.selector, student, uint256(SUBJECT_ECTS)
+            )
+        );
+        core.graduateStudentAndIssueDiploma(
+            student, "Engineer", "Computer Science", DIPLOMA_DOC_HASH, DIPLOMA_META_URI
+        );
+
+        assertTrue(registry.isStudentEnrolled(student));
+        assertFalse(registry.hasStudentGraduated(student));
+        assertEq(certification.balanceOf(student), 0);
+        assertFalse(certification.hasValidDiploma(student));
     }
 }

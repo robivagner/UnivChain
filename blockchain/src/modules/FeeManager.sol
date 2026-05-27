@@ -20,6 +20,7 @@ contract FeeManager is IFeeManager {
     error FeeManager__AddressZero();
     error FeeManager__TokenNotAllowed(address token);
     error FeeManager__FeeAlreadyPaid(address student);
+    error FeeManager__FeeNotPaid(address student);
     error FeeManager__NotEnoughFunds(uint256 requested, uint256 available);
 
     // State variables
@@ -67,6 +68,10 @@ contract FeeManager is IFeeManager {
 
     /// @inheritdoc IFeeManager
     function consumeFeeVoucher(address student) external onlyCore {
+        if (!s_studentHasPaid[student]) {
+            revert FeeManager__FeeNotPaid(student);
+        }
+
         s_studentHasPaid[student] = false;
         emit FeeVoucherConsumed(student);
     }
@@ -84,7 +89,14 @@ contract FeeManager is IFeeManager {
 
     /// @inheritdoc IFeeManager
     function payRegistrationFee(address token, address student) external onlyCore {
+        if (s_studentHasPaid[student]) {
+            revert FeeManager__FeeAlreadyPaid(student);
+        }
+
         uint256 requiredFee = s_tokenFees[token];
+        if (requiredFee == 0) {
+            revert FeeManager__TokenNotAllowed(token);
+        }
 
         IERC20(token).safeTransferFrom(msg.sender, address(this), requiredFee);
 
@@ -96,6 +108,10 @@ contract FeeManager is IFeeManager {
 
     /// @inheritdoc IFeeManager
     function processRefund(address student) external onlyCore {
+        if (!s_studentHasPaid[student]) {
+            revert FeeManager__FeeNotPaid(student);
+        }
+
         address token = s_studentPaymentToken[student];
         uint256 amount = s_tokenFees[token];
 

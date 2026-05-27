@@ -9,18 +9,51 @@ contract MockCertification is ICertification {
     mapping(address => bool) private s_hasDiploma;
 
     function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
-        return interfaceId == type(IERC721).interfaceId || interfaceId == type(IERC165).interfaceId;
+        return interfaceId == type(IERC721).interfaceId || interfaceId == type(IERC165).interfaceId
+            || interfaceId == 0xb45a3c0e;
     }
 
-    function issueDiploma(address student, string calldata, string calldata, uint256, uint256) external {
+    function issueDiploma(
+        address student,
+        string calldata,
+        string calldata,
+        uint256,
+        uint256,
+        bytes32,
+        string calldata
+    ) external {
         s_hasDiploma[student] = true;
+    }
+
+    function revokeDiploma(uint256) external {}
+
+    function getDiploma(uint256) external pure returns (Diploma memory) {
+        return Diploma({
+            documentHash: bytes32(0),
+            metadataURI: "",
+            totalCredits: 180,
+            finalAverage: 950,
+            issueTimestamp: 0,
+            degreeTitle: "B.Sc.",
+            major: "CS",
+            issuer: address(0),
+            revoked: false
+        });
+    }
+
+    function isDiplomaValid(uint256) external pure returns (bool) {
+        return true;
     }
 
     function hasDiploma(address student) external view returns (bool) {
         return s_hasDiploma[student];
     }
 
-    function getDiplomaIdForStudent(address student) external pure returns (uint256) {
+    function hasValidDiploma(address student) external view returns (bool) {
+        return s_hasDiploma[student];
+    }
+
+    function getDiplomaIdForStudent(address) external pure returns (uint256) {
         return 1;
     }
 
@@ -28,11 +61,6 @@ contract MockCertification is ICertification {
         return msg.sender;
     }
 
-    function getDiplomaMetadata(uint256) external view returns (uint256, uint256, string memory, string memory) {
-        return (950, block.timestamp, "B.Sc.", "CS");
-    }
-
-    // Test Helper
     function setMockHasDiploma(address student, bool status) external {
         s_hasDiploma[student] = status;
     }

@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
-import {Test, console} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import {IERC5192} from "../../src/interfaces/IERC5192.sol";
 
 import {Certification} from "../../src/modules/Certification.sol";
+import {ICertification} from "../../src/interfaces/ICertification.sol";
 import {SoulboundNFT} from "../../src/shared/SoulboundNFT.sol";
 
 contract CertificationTest is Test {
@@ -16,101 +18,153 @@ contract CertificationTest is Test {
     address public alice = makeAddr("alice");
 
     uint256 public constant CREDITS_REQUIRED = 180;
+    uint256 public constant MINIMUM_AVERAGE = 500;
+
+    bytes32 public constant DOC_HASH = keccak256("univchain-diploma-pdf-v1");
+    string public constant META_URI = "ipfs://QmUnivChainDiploma/metadata.json";
 
     function setUp() public {
-        certification = new Certification(core, CREDITS_REQUIRED);
+        certification = new Certification(core, CREDITS_REQUIRED, MINIMUM_AVERAGE);
     }
 
-    ///////////////////////////////////
-    /////// Constructor & Setup ///////
-    ///////////////////////////////////
+    function _issueDefaultDiploma(address who, uint256 credits, uint256 avg) internal {
+        vm.prank(core);
+        certification.issueDiploma(who, "Bachelor of IT", "Information Technology", credits, avg, DOC_HASH, META_URI);
+    }
 
     function test_RevertIfConstructorCoreAddressZero() public {
         vm.expectRevert(Certification.Certification__AddressZero.selector);
-        new Certification(address(0), CREDITS_REQUIRED);
+        new Certification(address(0), CREDITS_REQUIRED, MINIMUM_AVERAGE);
     }
 
     function test_GetUniversityCoreContract() public view {
         assertEq(certification.getUniversityCoreContract(), core);
     }
 
-    ///////////////////////////////////////
-    /////// Issue Diploma Functions ///////
-    ///////////////////////////////////////
-
-    /// @notice Tests if a diploma is successfully issued when the student meets the exact credit threshold.
     function test_IssueDiplomaSuccess() public {
-        uint256 credits = 180; // Minimum required credits
-        uint256 avg = 950; // Grade average (e.g., 9.50 represented as 950)
+        uint256 credits = 180;
+        uint256 avg = 950;
 
-        vm.prank(core);
-        certification.issueDiploma(student, "Bachelor of Computer Science", "Engineering", credits, avg);
+        _issueDefaultDiploma(student, credits, avg);
 
-        // ERC721 ownership and balance assertions
         uint256 expectedTokenId = 1;
         assertEq(certification.balanceOf(student), 1);
         assertEq(certification.ownerOf(expectedTokenId), student);
         assertTrue(certification.hasDiploma(student));
+        assertTrue(certification.isDiplomaValid(expectedTokenId));
         assertEq(certification.getDiplomaIdForStudent(student), expectedTokenId);
+        assertEq(certification.tokenURI(expectedTokenId), META_URI);
 
-        // Verify the stored diploma metadata
-        (uint256 savedAvg, uint256 issueTimestamp, string memory title, string memory major) =
-            certification.getDiplomaMetadata(expectedTokenId);
-
-        assertEq(savedAvg, avg);
-        assertEq(title, "Bachelor of Computer Science");
-        assertEq(major, "Engineering");
-        assertEq(issueTimestamp, block.timestamp);
+        ICertification.Diploma memory diploma = certification.getDiploma(expectedTokenId);
+        assertEq(diploma.documentHash, DOC_HASH);
+        assertEq(diploma.totalCredits, credits);
+        assertEq(diploma.finalAverage, avg);
+        assertEq(diploma.issueTimestamp, block.timestamp);
+        assertEq(diploma.degreeTitle, "Bachelor of IT");
+        assertEq(diploma.major, "Information Technology");
+        assertEq(diploma.issuer, core);
+        assertFalse(diploma.revoked);
     }
 
-    /// @notice Tests if a diploma is successfully issued when credits exceed the minimum requirement.
-    function test_IssueDiplomaWithMoreCreditsSuccess() public {
-        uint256 credits = 210; // Above the minimum required credits
-
+    function test_IssueDiplomaWithHashOnlyAnchor() public {
         vm.prank(core);
-        certification.issueDiploma(student, "Bachelor of IT", "Information Technology", credits, 900);
+        certification.issueDiploma(student, "B.Sc.", "CS", 180, 800, DOC_HASH, "");
 
-        assertEq(certification.balanceOf(student), 1);
-        assertTrue(certification.hasDiploma(student));
+        ICertification.Diploma memory diploma = certification.getDiploma(1);
+        assertEq(diploma.documentHash, DOC_HASH);
+        assertEq(bytes(diploma.metadataURI).length, 0);
     }
 
-    function test_RevertIfNotEnoughCredits() public {
-        uint256 creditsIncomplete = 175; // Below the 180 required credits threshold
+    function test_IssueDiplomaWithUriOnlyAnchor() public {
+        vm.prank(core);
+        certification.issueDiploma(student, "B.Sc.", "CS", 180, 800, bytes32(0), META_URI);
+
+        assertEq(certification.tokenURI(1), META_URI);
+    }
+
+    function test_RevertIfInvalidCredentialAnchor() public {
+        vm.prank(core);
+        vm.expectRevert(Certification.Certification__InvalidCredentialAnchor.selector);
+        certification.issueDiploma(student, "B.Sc.", "CS", 180, 800, bytes32(0), "");
+    }
+
+    function test_RevertIfStudentAlreadyHasDiploma() public {
+        _issueDefaultDiploma(student, 180, 800);
 
         vm.prank(core);
         vm.expectRevert(
-            abi.encodeWithSelector(Certification.Certification__NotEnoughCredits.selector, student, creditsIncomplete)
+            abi.encodeWithSelector(Certification.Certification__StudentAlreadyHasDiploma.selector, student)
         );
-        certification.issueDiploma(student, "Bachelor of IT", "Information Technology", creditsIncomplete, 800);
+        certification.issueDiploma(student, "B.Sc.", "CS", 180, 800, DOC_HASH, META_URI);
+    }
+
+    function test_RevertIfAverageTooLow() public {
+        vm.prank(core);
+        vm.expectRevert(
+            abi.encodeWithSelector(Certification.Certification__AverageTooLow.selector, student, uint256(499))
+        );
+        certification.issueDiploma(student, "Bachelor of IT", "Information Technology", 180, 499, DOC_HASH, META_URI);
+    }
+
+    function test_RevertIfNotEnoughCredits() public {
+        vm.prank(core);
+        vm.expectRevert(
+            abi.encodeWithSelector(Certification.Certification__NotEnoughCredits.selector, student, uint256(175))
+        );
+        certification.issueDiploma(student, "Bachelor of IT", "Information Technology", 175, 800, DOC_HASH, META_URI);
     }
 
     function test_RevertIfNotCoreAttemptsIssue() public {
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(Certification.Certification__NotCore.selector, alice));
-        certification.issueDiploma(student, "Bachelor of IT", "Information Technology", 180, 800);
+        certification.issueDiploma(student, "Bachelor of IT", "Information Technology", 180, 800, DOC_HASH, META_URI);
     }
 
-    ////////////////////////////////////
-    /////// Soulbound Constraint ///////
-    ////////////////////////////////////
+    function test_HasValidDiplomaAfterRevoke() public {
+        _issueDefaultDiploma(student, 180, 950);
+        uint256 tokenId = 1;
 
-    /// @notice Ensures the diploma behaves as a Soulbound Token (SBT) and cannot be transferred.
-    function test_RevertIfStudentAttemptsTransferDiploma() public {
-        // Setup: Issue the diploma to the student first
+        assertTrue(certification.hasDiploma(student));
+        assertTrue(certification.hasValidDiploma(student));
+
+        vm.prank(core);
+        certification.revokeDiploma(tokenId);
+
+        assertTrue(certification.hasDiploma(student));
+        assertFalse(certification.hasValidDiploma(student));
+        assertFalse(certification.isDiplomaValid(tokenId));
+    }
+
+    function test_RevokeDiplomaSuccess() public {
+        _issueDefaultDiploma(student, 180, 950);
+        uint256 tokenId = 1;
+
+        vm.prank(core);
+        certification.revokeDiploma(tokenId);
+
+        assertFalse(certification.isDiplomaValid(tokenId));
+        assertTrue(certification.hasDiploma(student));
+        assertTrue(certification.getDiploma(tokenId).revoked);
+    }
+
+    function test_RevertRevokeDiplomaTwice() public {
+        _issueDefaultDiploma(student, 180, 950);
+
         vm.startPrank(core);
-        certification.issueDiploma(student, "Bachelor of IT", "Information Technology", 180, 950);
-        uint256 tokenId = certification.getDiplomaIdForStudent(student);
+        certification.revokeDiploma(1);
+        vm.expectRevert(abi.encodeWithSelector(Certification.Certification__DiplomaAlreadyRevoked.selector, 1));
+        certification.revokeDiploma(1);
         vm.stopPrank();
+    }
 
-        // Attempting to transfer the diploma should fail
+    function test_RevertIfStudentAttemptsTransferDiploma() public {
+        _issueDefaultDiploma(student, 180, 950);
+        uint256 tokenId = certification.getDiplomaIdForStudent(student);
+
         vm.prank(student);
         vm.expectRevert(SoulboundNFT.SoulBoundNFT__NotAuthorized.selector);
         certification.transferFrom(student, alice, tokenId);
     }
-
-    //////////////////////////////
-    /////// View Functions ///////
-    //////////////////////////////
 
     function test_HasDiplomaReturnsFalseIfNotIssued() public view {
         assertFalse(certification.hasDiploma(alice));
@@ -119,46 +173,37 @@ contract CertificationTest is Test {
     function test_SupportsInterfaceERC721andERC165() public view {
         assertTrue(certification.supportsInterface(type(IERC721).interfaceId));
         assertTrue(certification.supportsInterface(type(IERC165).interfaceId));
+        assertTrue(certification.supportsInterface(0xb45a3c0e));
         assertFalse(certification.supportsInterface(0xffffffff));
     }
 
-    ///////////////////////////////////
-    /////// Fuzz Tests ////////////////
-    ///////////////////////////////////
+    function test_MintEmitsLockedEvent() public {
+        vm.expectEmit(true, false, false, true);
+        emit IERC5192.Locked(1);
 
-    /// @notice Fuzzes the diploma issuance process with random valid credits and averages,
-    /// then verifies metadata integrity and soulbound constraints.
+        _issueDefaultDiploma(student, 180, 800);
+
+        assertTrue(certification.locked(1));
+    }
+
     function testFuzz_CompleteDiplomaFlow(uint256 rawCredits, uint256 rawAvg) public {
-        // 1. Constraints
-        // Bound credits between the minimum requirement and a reasonable maximum (e.g., 500 ECTS)
         uint256 credits = bound(rawCredits, CREDITS_REQUIRED, 500);
-
-        // Bound the average between a passing grade (5.00 -> 500) and maximum grade (10.00 -> 1000)
         uint256 avg = bound(rawAvg, 500, 1000);
 
         string memory degreeTitle = "Fuzzed Bachelor Degree";
         string memory major = "Fuzzed Major";
 
-        // 2. Core issues the diploma
         vm.prank(core);
-        certification.issueDiploma(student, degreeTitle, major, credits, avg);
+        certification.issueDiploma(student, degreeTitle, major, credits, avg, DOC_HASH, META_URI);
 
-        // 3. State and Balance Assertions
         uint256 tokenId = certification.getDiplomaIdForStudent(student);
-        assertEq(certification.balanceOf(student), 1);
-        assertEq(certification.ownerOf(tokenId), student);
-        assertTrue(certification.hasDiploma(student));
+        assertTrue(certification.isDiplomaValid(tokenId));
 
-        // 4. Verify Metadata Math and Storage Integrity
-        (uint256 savedAvg, uint256 issueTimestamp, string memory savedTitle, string memory savedMajor) =
-            certification.getDiplomaMetadata(tokenId);
+        ICertification.Diploma memory diploma = certification.getDiploma(tokenId);
+        assertEq(diploma.totalCredits, credits);
+        assertEq(diploma.finalAverage, avg);
+        assertEq(diploma.documentHash, DOC_HASH);
 
-        assertEq(savedAvg, avg);
-        assertEq(savedTitle, degreeTitle);
-        assertEq(savedMajor, major);
-        assertEq(issueTimestamp, block.timestamp);
-
-        // 5. Soulbound Security Check
         vm.prank(student);
         vm.expectRevert(SoulboundNFT.SoulBoundNFT__NotAuthorized.selector);
         certification.transferFrom(student, alice, tokenId);

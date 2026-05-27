@@ -16,12 +16,17 @@ contract Gradebook is IGradebook {
     error Gradebook__AddressZero();
     error Gradebook__SubjectNotActive(uint256 subjectId);
     error Gradebook__NotProfessorOfSubject(address wrongProfessor, uint256 subjectId);
-    error Gradebook__GradeGreaterThanTen(uint256 grade);
+    error Gradebook__GradeOutOfBounds(uint256 grade);
     error Gradebook__SubjectIdOutOfBounds(uint256 subjectId, uint256 upperBound);
     error Gradebook__GradeAlreadyGiven(address student, uint256 subjectId, uint8 grade);
+    error Gradebook__CreditsOutOfBounds(uint8 credits);
+    error Gradebook__SubjectNameEmpty();
 
     // State variables
     uint256 public constant WEIGHTED_AVERAGE_PRECISION = 100;
+    uint8 public constant PASSING_GRADE = 5;
+    uint8 public constant MIN_SUBJECT_CREDITS = 1;
+    uint8 public constant MAX_SUBJECT_CREDITS = 30;
 
     IUniversityCore immutable i_coreContract;
 
@@ -63,6 +68,16 @@ contract Gradebook is IGradebook {
 
     /// @inheritdoc IGradebook
     function addSubject(string memory name, uint8 credits, address professor) external onlyCore {
+        if (bytes(name).length == 0) {
+            revert Gradebook__SubjectNameEmpty();
+        }
+        if (credits < MIN_SUBJECT_CREDITS || credits > MAX_SUBJECT_CREDITS) {
+            revert Gradebook__CreditsOutOfBounds(credits);
+        }
+        if (professor == address(0)) {
+            revert Gradebook__AddressZero();
+        }
+
         uint256 subjectId = s_tokenIdCounter++;
         s_subjects[subjectId] = Subject({name: name, credits: credits, professor: professor, isActive: true});
         emit SubjectAdded(subjectId, name, credits);
@@ -75,7 +90,7 @@ contract Gradebook is IGradebook {
 
         _postGradeChecks(record, subject, student, professor, subjectId, grade);
 
-        if (grade >= 5) {
+        if (grade >= PASSING_GRADE) {
             s_studentCredits[student] += subject.credits;
         }
 
@@ -147,8 +162,12 @@ contract Gradebook is IGradebook {
         for (uint256 i = 0; i < subjectIds.length; i++) {
             uint256 id = subjectIds[i];
             uint8 grade = s_studentGrades[student][id].grade;
-            uint8 credits = s_subjects[id].credits;
 
+            if (grade < PASSING_GRADE) {
+                continue;
+            }
+
+            uint8 credits = s_subjects[id].credits;
             totalWeightedPoints += uint256(grade) * uint256(credits);
             totalCredits += uint256(credits);
         }
@@ -188,8 +207,8 @@ contract Gradebook is IGradebook {
         if (professor != subject.professor) {
             revert Gradebook__NotProfessorOfSubject(professor, subjectId);
         }
-        if (grade > 10) {
-            revert Gradebook__GradeGreaterThanTen(grade);
+        if (grade > 10 || grade < 1) {
+            revert Gradebook__GradeOutOfBounds(grade);
         }
     }
 }

@@ -53,6 +53,16 @@ contract GradebookTest is Test {
         assertTrue(isActive);
     }
 
+    function test_RevertAddSubjectIfCreditsOutOfBounds() public {
+        vm.startPrank(core);
+        vm.expectRevert(abi.encodeWithSelector(Gradebook.Gradebook__CreditsOutOfBounds.selector, 0));
+        gradebook.addSubject("Invalid", 0, professor);
+
+        vm.expectRevert(abi.encodeWithSelector(Gradebook.Gradebook__CreditsOutOfBounds.selector, 31));
+        gradebook.addSubject("Invalid", 31, professor);
+        vm.stopPrank();
+    }
+
     function test_RevertAddSubjectIfNotCore() public {
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(Gradebook.Gradebook__NotCore.selector, alice));
@@ -151,10 +161,25 @@ contract GradebookTest is Test {
         vm.stopPrank();
     }
 
-    function test_RevertIfGradeGreaterThanTen() public {
-        vm.prank(core);
-        vm.expectRevert(abi.encodeWithSelector(Gradebook.Gradebook__GradeGreaterThanTen.selector, 11));
+    function test_RevertIfGradeOutOfBounds() public {
+        vm.startPrank(core);
+        vm.expectRevert(abi.encodeWithSelector(Gradebook.Gradebook__GradeOutOfBounds.selector, 11));
         gradebook.postGrade(professor, student, 1, 11);
+
+        vm.expectRevert(abi.encodeWithSelector(Gradebook.Gradebook__GradeOutOfBounds.selector, 0));
+        gradebook.postGrade(professor, student, 2, 0);
+        vm.stopPrank();
+    }
+
+    /// @notice Failed subjects count toward neither ECTS nor the graduation average.
+    function test_WeightedAverageExcludesFailedSubjects() public {
+        vm.startPrank(core);
+        gradebook.postGrade(professor, student, 1, 4); // 6 credits, failed
+        gradebook.postGrade(professor, student, 2, 10); // 4 credits, passed
+        vm.stopPrank();
+
+        assertEq(gradebook.getStudentCredits(student), 4);
+        assertEq(gradebook.getWeightedAverage(student), 1000); // 10.00 over 4 passed credits only
     }
 
     ///////////////////////////////////
@@ -202,30 +227,34 @@ contract GradebookTest is Test {
         vm.stopPrank();
 
         uint256 earnedCredits = 0;
-        uint256 attemptedCredits = 0;
+        uint256 passedCredits = 0;
         uint256 weightedSum = 0;
 
         // Subject 1: 6 ECTS
-        attemptedCredits += 6;
-        weightedSum += uint256(grade1) * 6;
-        if (grade1 >= 5) earnedCredits += 6;
+        if (grade1 >= 5) {
+            earnedCredits += 6;
+            passedCredits += 6;
+            weightedSum += uint256(grade1) * 6;
+        }
 
         // Subject 2: 4 ECTS
-        attemptedCredits += 4;
-        weightedSum += uint256(grade2) * 4;
-        if (grade2 >= 5) earnedCredits += 4;
+        if (grade2 >= 5) {
+            earnedCredits += 4;
+            passedCredits += 4;
+            weightedSum += uint256(grade2) * 4;
+        }
 
         // Subject 3: 5 ECTS
-        attemptedCredits += 5;
-        weightedSum += uint256(grade3) * 5;
-        if (grade3 >= 5) earnedCredits += 5;
+        if (grade3 >= 5) {
+            earnedCredits += 5;
+            passedCredits += 5;
+            weightedSum += uint256(grade3) * 5;
+        }
 
-        // Verify the accumulated ECTS credits (only passable grades)
         assertEq(gradebook.getStudentCredits(student), earnedCredits);
 
-        // Verify the final weighted average (using ALL attempted credits)
-        if (attemptedCredits > 0) {
-            uint256 expectedAvg = (weightedSum * 100) / attemptedCredits;
+        if (passedCredits > 0) {
+            uint256 expectedAvg = (weightedSum * 100) / passedCredits;
             assertEq(gradebook.getWeightedAverage(student), expectedAvg);
         } else {
             assertEq(gradebook.getWeightedAverage(student), 0);

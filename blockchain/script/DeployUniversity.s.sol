@@ -11,6 +11,8 @@ import {FeeManager} from "../src/modules/FeeManager.sol";
 
 contract DeployUniversity is Script {
     uint256 public constant CREDITS_REQUIRED = 180;
+    /// @dev Minimum diploma average on the 1–10 scale with precision 100 (500 = 5.00).
+    uint256 public constant MINIMUM_AVERAGE = 500;
 
     /// @dev Call from `forge script` (uses broadcast). `admin` is `msg.sender` at entry.
     function run() external returns (UniversityCore, StudentRegistry, Gradebook, Certification, FeeManager) {
@@ -56,7 +58,7 @@ contract DeployUniversity is Script {
         // 2. Deploy Modules
         registry = new StudentRegistry(address(core));
         gradebook = new Gradebook(address(core));
-        certification = new Certification(address(core), CREDITS_REQUIRED);
+        certification = new Certification(address(core), CREDITS_REQUIRED, MINIMUM_AVERAGE);
         feeManager = new FeeManager(address(core));
 
         // 3. Initialize and Setup

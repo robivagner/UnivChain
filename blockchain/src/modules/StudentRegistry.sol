@@ -16,6 +16,10 @@ contract StudentRegistry is IStudentRegistry, SoulboundNFT {
     error StudentRegistry__NotCore(address sender);
     error StudentRegistry__AddressZero();
     error StudentRegistry__InvalidTokenId(uint256 tokenId);
+    error StudentRegistry__StudentAlreadyEnrolled(address student);
+    error StudentRegistry__StudentAlreadyGraduated(address student);
+    error StudentRegistry__StudentIsExpelled(address student);
+    error StudentRegistry__StudentNotEnrolled(address student);
 
     // State variables
     IUniversityCore immutable i_coreContract;
@@ -41,7 +45,7 @@ contract StudentRegistry is IStudentRegistry, SoulboundNFT {
      * @notice Constructor sets the tracking rules and links the master routing Hub.
      * @param coreContract The central execution contract managing roles tracking.
      */
-    constructor(address coreContract) SoulboundNFT() {
+    constructor(address coreContract) SoulboundNFT("StudentRegistry", "SR") {
         if (coreContract == address(0)) {
             revert StudentRegistry__AddressZero();
         }
@@ -56,6 +60,8 @@ contract StudentRegistry is IStudentRegistry, SoulboundNFT {
 
     /// @inheritdoc IStudentRegistry
     function enrollStudent(address student, bytes32 studentIdHash) external onlyCore {
+        _assertCanEnroll(student);
+
         uint256 tokenId = s_tokenIdCounter++;
         s_studentToTokenId[student] = tokenId;
         _mint(student, tokenId);
@@ -73,13 +79,12 @@ contract StudentRegistry is IStudentRegistry, SoulboundNFT {
 
     /// @inheritdoc IStudentRegistry
     function graduateStudent(address student) external onlyCore {
-        uint256 tokenId = s_studentToTokenId[student];
-        if (tokenId == 0) {
-            revert StudentRegistry__InvalidTokenId(tokenId);
-        }
-        _requireOwned(tokenId);
+        uint256 tokenId = _requireActiveStudent(student);
 
         Student storage s = s_students[tokenId];
+        if (s.hasGraduated) {
+            revert StudentRegistry__StudentAlreadyGraduated(student);
+        }
         s.hasGraduated = true;
         s.graduationTimestamp = block.timestamp;
 
@@ -90,11 +95,11 @@ contract StudentRegistry is IStudentRegistry, SoulboundNFT {
 
     /// @inheritdoc IStudentRegistry
     function expellStudent(address student) external onlyCore {
-        uint256 tokenId = s_studentToTokenId[student];
-        if (tokenId == 0) {
-            revert StudentRegistry__InvalidTokenId(tokenId);
+        uint256 tokenId = _requireActiveStudent(student);
+
+        if (s_students[tokenId].isExpelled) {
+            revert StudentRegistry__StudentIsExpelled(student);
         }
-        _requireOwned(tokenId);
 
         s_students[tokenId].isExpelled = true;
 
@@ -138,5 +143,35 @@ contract StudentRegistry is IStudentRegistry, SoulboundNFT {
     function hasStudentGraduated(address student) external view returns (bool) {
         uint256 tokenId = s_studentToTokenId[student];
         return s_students[tokenId].hasGraduated;
+    }
+
+    /////////////////////////////////
+    /////// Private Functions ///////
+    /////////////////////////////////
+
+    function _assertCanEnroll(address student) private view {
+        if (balanceOf(student) != 0) {
+            revert StudentRegistry__StudentAlreadyEnrolled(student);
+        }
+
+        uint256 existingId = s_studentToTokenId[student];
+        if (existingId == 0) {
+            return;
+        }
+
+        Student memory prior = s_students[existingId];
+        if (prior.isExpelled) {
+            revert StudentRegistry__StudentIsExpelled(student);
+        }
+        if (prior.hasGraduated) {
+            revert StudentRegistry__StudentAlreadyGraduated(student);
+        }
+    }
+
+    function _requireActiveStudent(address student) private view returns (uint256 tokenId) {
+        tokenId = s_studentToTokenId[student];
+        if (tokenId == 0 || balanceOf(student) == 0) {
+            revert StudentRegistry__StudentNotEnrolled(student);
+        }
     }
 }

@@ -74,8 +74,8 @@ interface IGradebook {
         view
         returns (uint8 grade, uint256 timestamp, address professor);
 
-    /// @notice Computes the overall weighted average grade for a student based on all recorded grades and ECTS credits.
-    /// @dev Uses a precision multiplier (100) to represent decimals as integers (e.g., 9.50 returned as 950).
+    /// @notice Computes the weighted average over passed subjects only (grade >= 5).
+    /// @dev Uses the same ECTS weights as credit accumulation. Precision multiplier 100 (e.g., 9.50 as 950).
     /// @param student The address of the student to calculate the average for.
     /// @return average The calculated weighted average scaled by the precision factor.
     function getWeightedAverage(address student) external view returns (uint256 average);

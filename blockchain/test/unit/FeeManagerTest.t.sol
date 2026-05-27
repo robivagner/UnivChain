@@ -100,6 +100,32 @@ contract FeeManagerTest is Test {
         vm.stopPrank();
     }
 
+    function test_RevertPayRegistrationFeeIfAlreadyPaid() public {
+        feeManager.setTokenFee(address(mockToken), REGISTRATION_FEE);
+        mockToken.mint(address(this), REGISTRATION_FEE * 2);
+        mockToken.approve(address(feeManager), REGISTRATION_FEE * 2);
+
+        feeManager.payRegistrationFee(address(mockToken), alice);
+
+        vm.expectRevert(abi.encodeWithSelector(FeeManager.FeeManager__FeeAlreadyPaid.selector, alice));
+        feeManager.payRegistrationFee(address(mockToken), alice);
+    }
+
+    function test_RevertPayRegistrationFeeIfTokenNotAllowed() public {
+        vm.expectRevert(abi.encodeWithSelector(FeeManager.FeeManager__TokenNotAllowed.selector, address(mockToken)));
+        feeManager.payRegistrationFee(address(mockToken), alice);
+    }
+
+    function test_RevertConsumeVoucherIfNotPaid() public {
+        vm.expectRevert(abi.encodeWithSelector(FeeManager.FeeManager__FeeNotPaid.selector, alice));
+        feeManager.consumeFeeVoucher(alice);
+    }
+
+    function test_RevertProcessRefundIfNotPaid() public {
+        vm.expectRevert(abi.encodeWithSelector(FeeManager.FeeManager__FeeNotPaid.selector, bob));
+        feeManager.processRefund(bob);
+    }
+
     function test_RevertPayRegistrationFeeWithoutAllowance() public {
         feeManager.setTokenFee(address(mockToken), REGISTRATION_FEE);
         mockToken.mint(address(this), REGISTRATION_FEE);

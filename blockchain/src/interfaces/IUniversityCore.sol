@@ -13,34 +13,14 @@ interface IUniversityCore {
     /// @notice Returns the Keccak-256 hash of the DIPLOMA_ISSUER_ROLE.
     function DIPLOMA_ISSUER_ROLE() external view returns (bytes32);
 
-    /// @notice Initializes the protocol by linking the external module contracts.
-    /// @dev Reverts if already initialized or if any address is zero.
+    /// @notice One-time setup linking the four spoke contracts to the hub.
+    /// @dev Reverts if already initialized or if any address is zero. Module addresses cannot be changed afterward.
     /// @param studentRegistry The address of the deployed Student Registry contract.
     /// @param gradebook The address of the deployed Gradebook contract.
     /// @param certification The address of the deployed Certification contract.
     /// @param feeManager The address of the deployed Fee Manager contract.
     function initializeCore(address studentRegistry, address gradebook, address certification, address feeManager)
         external;
-
-    /// @notice Updates the address of the Identity module (Student Registry).
-    /// @dev Can only be called by an Admin. Checks for zero address and IERC721 interface support.
-    /// @param studentRegistry The address of the new Identity contract.
-    function setStudentRegistryContract(address studentRegistry) external;
-
-    /// @notice Updates the address of the Gradebook module.
-    /// @dev Can only be called by an Admin. Checks for zero address and avoids redundant updates.
-    /// @param gradebook The address of the new Gradebook contract.
-    function setGradebookContract(address gradebook) external;
-
-    /// @notice Updates the address of the Certification module.
-    /// @dev Can only be called by an Admin. Checks for zero address and IERC721 interface support.
-    /// @param certification The address of the new Certification contract.
-    function setCertificationContract(address certification) external;
-
-    /// @notice Updates the address of the Fee Manager module.
-    /// @dev Can only be called by an Admin. Checks for zero address and avoids redundant updates.
-    /// @param feeManager The address of the new Fee Manager contract.
-    function setFeeManagerContract(address feeManager) external;
 
     /// @notice Grants the PROFESSOR_ROLE to a specified address.
     /// @dev Can only be called by an Admin. Emits a `ProfessorAdded` event.
@@ -108,12 +88,20 @@ interface IUniversityCore {
     function setSubjectActivity(uint256 subjectId, bool isActive) external;
 
     /// @notice Gateway function to finalize a student's studies and issue their degree.
-    /// @dev Can only be called by a Diploma Issuer. Grabs ECTS/GPA metrics, graduates the student, and mints the Diploma SBT.
-    /// @param student The address of the graduating student.
-    /// @param degreeTitle The title bestowed (e.g., "Bachelor of Computer Science").
-    /// @param major The specific field of study (e.g., "Software Engineering").
-    function graduateStudentAndIssueDiploma(address student, string calldata degreeTitle, string calldata major)
-        external;
+    /// @dev Can only be called by a Diploma Issuer. Mints the diploma SBT then burns the identity SBT.
+    /// @param documentHash keccak256 of the canonical off-chain diploma file the university issued.
+    /// @param metadataURI ERC-721 metadata URI (e.g. IPFS JSON) describing the credential.
+    function graduateStudentAndIssueDiploma(
+        address student,
+        string calldata degreeTitle,
+        string calldata major,
+        bytes32 documentHash,
+        string calldata metadataURI
+    ) external;
+
+    /// @notice Revokes a diploma credential while preserving on-chain audit history.
+    /// @param tokenId The diploma token ID to revoke.
+    function revokeDiploma(uint256 tokenId) external;
 
     /// @notice Public permissionless entry point for students to apply and pay their registration fee.
     /// @dev Pulls tokens from student to Core, grants allowance to FeeManager, and registers the payment voucher.

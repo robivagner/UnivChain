@@ -13,7 +13,8 @@ contract MockStudentRegistry is IStudentRegistry {
 
     // Trebuie să simuleze că suportă interfața ERC721 pentru că UniversityCore verifică asta
     function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
-        return interfaceId == type(IERC721).interfaceId || interfaceId == type(IERC165).interfaceId;
+        return interfaceId == type(IERC721).interfaceId || interfaceId == type(IERC165).interfaceId
+            || interfaceId == 0xb45a3c0e;
     }
 
     function isStudentEnrolled(address student) external view returns (bool) {

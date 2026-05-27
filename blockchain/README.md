@@ -16,6 +16,17 @@ The protocol is decoupled into five distinct, highly secure smart contracts to m
 * **Gradebook (Academic Spoke):** Empowers professors to register unique subject curricula and record immutable student grades.
 * **Certification (Alumni Spoke):** Directs the cryptographic minting of the final Graduation Diploma Soulbound NFT.
 
+Spoke contracts are wired to the hub exactly once via `initializeCore` and cannot be replaced afterward; the protocol is not upgradeable in place.
+
+**Diploma credentials:** Each graduation mints a soulbound ERC-721 with on-chain snapshots (ECTS, GPA, issuer), an optional `documentHash` (keccak256 of the canonical PDF/JSON), and a `metadataURI` (IPFS/HTTPS JSON for wallets). Admins may revoke a diploma via `revokeDiploma` while keeping the audit trail on-chain. Verifiers should use `hasValidDiploma` / `isDiplomaValid`, not ownership alone.
+
+**Access-control split (hybrid hub-and-spoke):**
+
+| Layer | Responsibility |
+|-------|----------------|
+| **UniversityCore** | Roles, multi-module workflows (paid → enrolled, enrolled → graded, eligible → diploma) |
+| **Spokes** | Domain invariants on their own state (grade bounds, fee voucher rules, duplicate enroll, graduation policy) |
+
 ---
 
 ## Prerequisites

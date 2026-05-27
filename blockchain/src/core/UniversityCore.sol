@@ -16,8 +16,9 @@ import {IFeeManager} from "../interfaces/IFeeManager.sol";
 
 /**
  * @title UniversityCore
- * @notice Core implementation contract serving as the administrative engine of the protocol.
- * @dev Inherits AccessControl for role management and implements the IUniversityCore interface.
+ * @notice Hub for roles, cross-module workflows, and user-facing entry points.
+ * @dev Hybrid access model: Core enforces journeys that span modules (enrollment, grading, graduation).
+ *      Spokes enforce their own storage invariants even if Core were misconfigured.
  */
 contract UniversityCore is IUniversityCore, AccessControl {
     using SafeERC20 for IERC20;
@@ -26,10 +27,10 @@ contract UniversityCore is IUniversityCore, AccessControl {
     error UniversityCore__NotInitialized();
     error UniversityCore__AlreadyInitialized();
     error UniversityCore__AddressZero();
-    error UniversityCore__SameAddress();
     error UniversityCore__FacultyNameZero();
     error UniversityCore__StudentIsNotEnrolled(address student);
     error UniversityCore__ContractDoesNotSupportIERC721(address verifiedContract);
+    error UniversityCore__ContractDoesNotSupportIERC5192(address verifiedContract);
     error UniversityCore__StudentEnrolledAlready(address student);
     error UniversityCore__StudentAlreadyHasDiploma(address student);
     error UniversityCore__AccountIsNotProfessor(address professor);
@@ -44,6 +45,9 @@ contract UniversityCore is IUniversityCore, AccessControl {
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant DIPLOMA_ISSUER_ROLE = keccak256("DIPLOMA_ISSUER_ROLE");
 
+    /// @dev EIP-5192 interface id per https://eips.ethereum.org/EIPS/eip-5192
+    bytes4 private constant INTERFACE_ID_ERC5192 = 0xb45a3c0e;
+
     string public s_facultyName;
     IStudentRegistry public s_studentRegistry;
     IGradebook public s_gradebook;
@@ -54,15 +58,12 @@ contract UniversityCore is IUniversityCore, AccessControl {
     event UniversityCoreInitialized(
         address studentRegistry, address gradebook, address certification, address feeManager
     );
-    event StudentRegistryContractUpdate(address newStudentRegistryContract, address oldStudentRegistry);
-    event GradebookContractUpdate(address newGradebookContract, address oldGradebook);
-    event CertificationContractUpdate(address newCertificationContract, address oldCertification);
-    event FeeManagerContractUpdate(address newFeeManager, address oldFeeManager);
     event ProfessorAdded(address indexed professor);
     event DiplomaIssuerAdded(address indexed issuer);
     event FacultyNameSet(string facultyName);
     event StudentEnrollmentRequested(address student);
     event StudentEnrollmentRejected(address student);
+    event StudentGraduated(address indexed student, uint256 indexed diplomaTokenId);
 
     // Modifiers
     modifier coreInitialized() {
@@ -122,12 +123,8 @@ contract UniversityCore is IUniversityCore, AccessControl {
             revert UniversityCore__AlreadyInitialized();
         }
 
-        if (!IERC165(studentRegistry).supportsInterface(type(IERC721).interfaceId)) {
-            revert UniversityCore__ContractDoesNotSupportIERC721(studentRegistry);
-        }
-        if (!IERC165(certification).supportsInterface(type(IERC721).interfaceId)) {
-            revert UniversityCore__ContractDoesNotSupportIERC721(certification);
-        }
+        _requireSoulboundNftModule(studentRegistry);
+        _requireSoulboundNftModule(certification);
 
         s_studentRegistry = IStudentRegistry(studentRegistry);
         s_gradebook = IGradebook(gradebook);
@@ -135,68 +132,6 @@ contract UniversityCore is IUniversityCore, AccessControl {
         s_feeManager = IFeeManager(feeManager);
 
         emit UniversityCoreInitialized(studentRegistry, gradebook, certification, feeManager);
-    }
-
-    /// @inheritdoc IUniversityCore
-    function setStudentRegistryContract(address studentRegistry)
-        external
-        onlyRole(ADMIN_ROLE)
-        zeroAddress(studentRegistry)
-    {
-        IStudentRegistry oldStudentRegistry = s_studentRegistry;
-
-        if (studentRegistry == address(oldStudentRegistry)) {
-            revert UniversityCore__SameAddress();
-        }
-        if (!IERC165(studentRegistry).supportsInterface(type(IERC721).interfaceId)) {
-            revert UniversityCore__ContractDoesNotSupportIERC721(studentRegistry);
-        }
-
-        s_studentRegistry = IStudentRegistry(studentRegistry);
-
-        emit StudentRegistryContractUpdate(studentRegistry, address(oldStudentRegistry));
-    }
-
-    /// @inheritdoc IUniversityCore
-    function setGradebookContract(address gradebook) external onlyRole(ADMIN_ROLE) zeroAddress(gradebook) {
-        IGradebook oldGradebook = s_gradebook;
-
-        if (gradebook == address(oldGradebook)) {
-            revert UniversityCore__SameAddress();
-        }
-
-        s_gradebook = IGradebook(gradebook);
-
-        emit GradebookContractUpdate(gradebook, address(oldGradebook));
-    }
-
-    /// @inheritdoc IUniversityCore
-    function setCertificationContract(address certification) external onlyRole(ADMIN_ROLE) zeroAddress(certification) {
-        ICertification oldCertification = s_certification;
-
-        if (certification == address(oldCertification)) {
-            revert UniversityCore__SameAddress();
-        }
-        if (!IERC165(certification).supportsInterface(type(IERC721).interfaceId)) {
-            revert UniversityCore__ContractDoesNotSupportIERC721(certification);
-        }
-
-        s_certification = ICertification(certification);
-
-        emit CertificationContractUpdate(certification, address(oldCertification));
-    }
-
-    /// @inheritdoc IUniversityCore
-    function setFeeManagerContract(address feeManager) external onlyRole(ADMIN_ROLE) zeroAddress(feeManager) {
-        IFeeManager oldFeeManager = s_feeManager;
-
-        if (feeManager == address(oldFeeManager)) {
-            revert UniversityCore__SameAddress();
-        }
-
-        s_feeManager = IFeeManager(feeManager);
-
-        emit FeeManagerContractUpdate(feeManager, address(oldFeeManager));
     }
 
     /// @inheritdoc IUniversityCore
@@ -325,33 +260,28 @@ contract UniversityCore is IUniversityCore, AccessControl {
     /////////////////////////////////////////////
 
     /// @inheritdoc IUniversityCore
-    function graduateStudentAndIssueDiploma(address student, string calldata degreeTitle, string calldata major)
-        external
-        onlyRole(DIPLOMA_ISSUER_ROLE)
-        coreInitialized
-    {
-        IStudentRegistry studentRegistry = s_studentRegistry;
-        ICertification certification = s_certification;
-        IGradebook gradebook = s_gradebook;
+    function graduateStudentAndIssueDiploma(
+        address student,
+        string calldata degreeTitle,
+        string calldata major,
+        bytes32 documentHash,
+        string calldata metadataURI
+    ) external onlyRole(DIPLOMA_ISSUER_ROLE) coreInitialized {
+        _assertEligibleForGraduation(student);
 
-        if (studentRegistry.hasStudentGraduated(student)) {
-            revert UniversityCore__StudentHasAlreadyGraduated(student);
-        }
-        if (studentRegistry.isStudentExpelled(student)) {
-            revert UniversityCore__StudentIsExpelled(student);
-        }
-        if (!studentRegistry.isStudentEnrolled(student)) {
-            revert UniversityCore__StudentIsNotEnrolled(student);
-        }
-        if (certification.hasDiploma(student)) {
-            revert UniversityCore__StudentAlreadyHasDiploma(student);
-        }
+        uint256 credits = s_gradebook.getStudentCredits(student);
+        uint256 weightedAverage = s_gradebook.getWeightedAverage(student);
 
-        uint256 credits = gradebook.getStudentCredits(student);
-        uint256 weightedAverage = gradebook.getWeightedAverage(student);
+        s_certification.issueDiploma(student, degreeTitle, major, credits, weightedAverage, documentHash, metadataURI);
+        uint256 diplomaTokenId = s_certification.getDiplomaIdForStudent(student);
+        s_studentRegistry.graduateStudent(student);
 
-        studentRegistry.graduateStudent(student);
-        certification.issueDiploma(student, degreeTitle, major, credits, weightedAverage);
+        emit StudentGraduated(student, diplomaTokenId);
+    }
+
+    /// @inheritdoc IUniversityCore
+    function revokeDiploma(uint256 tokenId) external onlyRole(ADMIN_ROLE) coreInitialized {
+        s_certification.revokeDiploma(tokenId);
     }
 
     ////////////////////////////////////////
@@ -406,5 +336,34 @@ contract UniversityCore is IUniversityCore, AccessControl {
     /// @inheritdoc IUniversityCore
     function getFacultyName() external view returns (string memory) {
         return s_facultyName;
+    }
+
+    /////////////////////////////////
+    /////// Private Functions ///////
+    /////////////////////////////////
+
+    /// @dev Registry and Certification must implement ERC-721 and EIP-5192 (soulbound signaling).
+    function _requireSoulboundNftModule(address module) private view {
+        if (!IERC165(module).supportsInterface(type(IERC721).interfaceId)) {
+            revert UniversityCore__ContractDoesNotSupportIERC721(module);
+        }
+        if (!IERC165(module).supportsInterface(INTERFACE_ID_ERC5192)) {
+            revert UniversityCore__ContractDoesNotSupportIERC5192(module);
+        }
+    }
+
+    function _assertEligibleForGraduation(address student) private view {
+        if (s_studentRegistry.hasStudentGraduated(student)) {
+            revert UniversityCore__StudentHasAlreadyGraduated(student);
+        }
+        if (s_studentRegistry.isStudentExpelled(student)) {
+            revert UniversityCore__StudentIsExpelled(student);
+        }
+        if (!s_studentRegistry.isStudentEnrolled(student)) {
+            revert UniversityCore__StudentIsNotEnrolled(student);
+        }
+        if (s_certification.hasDiploma(student)) {
+            revert UniversityCore__StudentAlreadyHasDiploma(student);
+        }
     }
 }
