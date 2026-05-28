@@ -83,6 +83,18 @@ forge coverage
 
 # Deployment Guide
 
+## Local Anvil (recommended for frontend work)
+
+From the **repository root**:
+
+```bash
+make local    # fresh Anvil + deploy + frontend address sync + mock enrollment token
+```
+
+Or step by step: `make anvil` → `make deploy` → `make sync-frontend` → optional `make setup-dev`.
+
+## Remote networks
+
 Deployment and contract linking are completely automated via Foundry Solidity scripting.
 
 ## 1. Setup Environment Variables

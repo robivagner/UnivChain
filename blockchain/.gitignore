@@ -3,3 +3,5 @@ cache/
 broadcast/
 lib/
 .env
+.anvil.pid
+anvil.log

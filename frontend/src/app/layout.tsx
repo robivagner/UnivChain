@@ -5,7 +5,14 @@ import { ConnectKitProvider } from "connectkit";
 import { config } from "@/config/wagmi";
 import "./globals.css";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 2_000,
+      refetchOnWindowFocus: true,
+    },
+  },
+});
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -13,11 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <WagmiProvider config={config}>
           <QueryClientProvider client={queryClient}>
-            <ConnectKitProvider>
-              <div className="min-h-screen bg-slate-50">
-                {children}
-              </div>
-            </ConnectKitProvider>
+            <ConnectKitProvider>{children}</ConnectKitProvider>
           </QueryClientProvider>
         </WagmiProvider>
       </body>
