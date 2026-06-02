@@ -58,16 +58,14 @@ export function usePendingEnrollmentRequests(enabled = true) {
     [queryClient, queryKey]
   );
 
-  /** After accept/reject: update UI immediately, sync indexer, then refetch from API. */
+  /** After accept/reject: update UI immediately, refetch, sync indexer in background. */
   const refreshAfterAction = useCallback(
     async (student: `0x${string}`) => {
       removePendingOptimistic(student);
-      try {
-        await triggerIndexerSync();
-      } catch {
-        // Indexer may be down; optimistic UI still helps. Refetch will restore truth.
-      }
       await queryClient.invalidateQueries({ queryKey });
+      void triggerIndexerSync().then(() => {
+        void queryClient.invalidateQueries({ queryKey });
+      });
     },
     [queryClient, queryKey, removePendingOptimistic]
   );

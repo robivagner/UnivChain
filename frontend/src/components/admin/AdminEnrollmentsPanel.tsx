@@ -9,9 +9,39 @@ import { hashStudentMatriculation } from "@/lib/matriculation";
 import { usePendingEnrollmentRequests } from "@/lib/enrollment/usePendingEnrollmentRequests";
 import { ANVIL_ADMIN_ADDRESS } from "@/constants/local";
 import { PendingEnrollmentRow } from "./PendingEnrollmentRow";
+import { AdminTxProvider, useAdminTx } from "./AdminTxContext";
 import { formInputClassName } from "@/lib/formInputClassName";
+import { formatTxError } from "@/lib/wallet/formatTxError";
+import { runContractTx } from "@/lib/wallet/runContractTx";
+import { TxErrorAlert } from "@/components/shared/TxErrorAlert";
+import {
+  btnSecondaryClass,
+  formInputMonoClassName,
+  portalCardClass,
+  portalPageTitleClass,
+  portalSectionTitleClass,
+} from "@/lib/ui/portalClasses";
+import {
+  RoleGateConnect,
+  RoleGateDenied,
+  RoleGateLoading,
+  RoleGateMissingDeployment,
+} from "@/components/shared/RoleGate";
 
-export function AdminEnrollmentsPanel() {
+type Props = {
+  /** When true, rendered inside AdminDashboard (no outer role gate). */
+  embedded?: boolean;
+};
+
+export function AdminEnrollmentsPanel({ embedded = false }: Props) {
+  return (
+    <AdminTxProvider>
+      <AdminEnrollmentsPanelContent embedded={embedded} />
+    </AdminTxProvider>
+  );
+}
+
+function AdminEnrollmentsPanelContent({ embedded = false }: Props) {
   const { isConnected, address } = useAccount();
   const { isAdmin, isLoading: isAdminLoading } = useIsAdmin();
   const publicClient = usePublicClient();
@@ -21,103 +51,92 @@ export function AdminEnrollmentsPanel() {
 
   const [manualAddress, setManualAddress] = useState("");
   const [manualMatriculation, setManualMatriculation] = useState("");
-  const { writeContractAsync, isPending: isManualPending, error: manualError, reset } =
-    useWriteContract();
+  const [manualError, setManualError] = useState<string | null>(null);
+  const { txBusy, runAdminTx } = useAdminTx();
+  const { writeContractAsync, isPending: isManualPending, reset } = useWriteContract();
 
-  if (!isConnected) {
-    return (
-      <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-600">
-        Connect your wallet to manage enrollments.
-      </div>
-    );
+  if (!embedded) {
+    if (!isConnected) return <RoleGateConnect title="enrollment management" />;
+    if (isAdminLoading) return <RoleGateLoading />;
+    if (!isAdmin) {
+      return (
+        <RoleGateDenied
+          title="Admin access required"
+          roleLabel="ADMIN_ROLE"
+          connected={address}
+          hint={`Local dev admin (Anvil #0): ${ANVIL_ADMIN_ADDRESS}`}
+        />
+      );
+    }
+    if (!deployment) return <RoleGateMissingDeployment />;
   }
 
-  if (isAdminLoading) {
-    return (
-      <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-600">
-        Checking admin role…
-      </div>
-    );
-  }
+  if (!deployment) return null;
 
-  if (!isAdmin) {
-    return (
-      <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
-        <p className="font-semibold mb-2">Admin access required</p>
-        <p className="mb-2">
-          Connected account does not have <span className="font-mono">ADMIN_ROLE</span> on
-          UniversityCore.
-        </p>
-        <p className="font-mono text-xs break-all">Connected: {address}</p>
-        <p className="text-xs mt-2">Local dev admin (Anvil #0): {ANVIL_ADMIN_ADDRESS}</p>
-      </div>
-    );
-  }
-
-  if (!deployment) {
-    return (
-      <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
-        This network is not configured. Use Anvil chain <span className="font-mono">31337</span> and
-        run <span className="font-mono">make local</span>.
-      </div>
-    );
-  }
-
-  const handleManualAccept = async () => {
+  const handleManualAccept = () => {
     if (!publicClient || !isAddress(manualAddress) || !manualMatriculation.trim()) {
       alert("Enter a valid student address and matriculation number.");
       return;
     }
 
-    reset();
-    try {
-      const hash = await writeContractAsync({
-        address: deployment.universityCore,
-        abi: UniversityCoreABI,
-        functionName: "acceptEnrollment",
-        args: [getAddress(manualAddress), hashStudentMatriculation(manualMatriculation)],
-      });
-      await publicClient.waitForTransactionReceipt({ hash });
-      setManualAddress("");
-      setManualMatriculation("");
-      await refreshAfterAction(getAddress(manualAddress));
-    } catch {
-      // manualError
-    }
+    void runAdminTx(async () => {
+      reset();
+      setManualError(null);
+      try {
+        const student = getAddress(manualAddress);
+        await runContractTx({
+          publicClient,
+          write: () =>
+            writeContractAsync({
+              address: deployment.universityCore,
+              abi: UniversityCoreABI,
+              functionName: "acceptEnrollment",
+              args: [student, hashStudentMatriculation(manualMatriculation)],
+            }),
+        });
+        setManualAddress("");
+        setManualMatriculation("");
+        await refreshAfterAction(student);
+      } catch (e) {
+        setManualError(formatTxError(e));
+      }
+    });
   };
 
+  const manualBusy = txBusy || isManualPending;
+
+  const TitleTag = embedded ? "h2" : "h1";
+
   return (
-    <div className="flex flex-col gap-8 max-w-2xl mx-auto">
+    <div className={`flex flex-col gap-8 ${embedded ? "" : "max-w-2xl mx-auto"}`}>
       <section>
-        <h1 className="text-2xl font-bold text-slate-900 mb-2">Enrollment requests</h1>
-        <p className="text-sm text-slate-600 leading-relaxed">
-          Pending requests come from the UnivChain indexer (SQLite + incremental event scan), reconciled
-          with on-chain fee and enrollment state. Run <span className="font-mono">make indexer-dev</span>{" "}
-          alongside the frontend. After accept or reject, the row disappears immediately and the
-          indexer syncs on demand (no need to wait for the 15s poll).
+        <TitleTag className={`${portalPageTitleClass} mb-2 ${embedded ? "!text-xl" : ""}`}>
+          Enrollment requests
+        </TitleTag>
+        <p className="text-sm text-uc-muted leading-relaxed">
+          Pending requests come from the UnivChain indexer, reconciled with on-chain state. After
+          accept or reject, the row disappears immediately and the indexer syncs on demand.
         </p>
         {isFetching && !isLoading && (
-          <p className="text-xs text-blue-600 mt-2">Refreshing…</p>
+          <p className="text-xs text-uc-cyan mt-2">Refreshing…</p>
         )}
       </section>
 
       <section>
-        <h2 className="text-sm font-semibold text-slate-700 mb-3">
-          Pending ({pending.length})
-        </h2>
+        <h3 className={portalSectionTitleClass}>Pending ({pending.length})</h3>
 
         {isLoading && (
-          <p className="text-sm text-slate-500 py-8 text-center">Loading pending requests…</p>
+          <p className="text-sm text-uc-muted py-8 text-center">Loading pending requests…</p>
         )}
 
         {error && (
-          <p className="text-sm text-red-600 py-4">
+          <p className="text-sm text-red-300 py-4">
             {error instanceof Error ? error.message : "Failed to load pending requests"}
           </p>
         )}
 
         {!isLoading && !error && pending.length === 0 && (
-          <p className="text-sm text-slate-500 py-8 text-center rounded-xl border border-dashed border-slate-300 bg-white">
+          <p className="text-sm text-uc-muted py-8 text-center rounded-xl border border-dashed border-white/15 portal-card">
             No pending enrollment requests. Students appear here after they call{" "}
             <span className="font-mono">requestEnrollment</span>.
           </p>
@@ -137,15 +156,14 @@ export function AdminEnrollmentsPanel() {
         )}
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-5">
-        <h2 className="text-sm font-semibold text-slate-800 mb-2">Manual accept</h2>
-        <p className="text-xs text-slate-500 mb-4">
-          Fallback if a student paid but does not appear in the list (e.g. very old events). Prefer
-          the queue above.
+      <section className={portalCardClass}>
+        <h3 className={portalSectionTitleClass}>Manual accept</h3>
+        <p className="text-xs text-uc-muted mb-4">
+          Fallback if a student paid but does not appear in the list. Prefer the queue above.
         </p>
         <div className="flex flex-col gap-3">
           <input
-            className={`${formInputClassName} font-mono`}
+            className={formInputMonoClassName}
             placeholder="Student address 0x…"
             value={manualAddress}
             onChange={(e) => setManualAddress(e.target.value)}
@@ -159,14 +177,12 @@ export function AdminEnrollmentsPanel() {
           <button
             type="button"
             onClick={handleManualAccept}
-            disabled={isManualPending}
-            className="py-2 rounded-lg text-sm font-semibold text-white bg-slate-800 hover:bg-slate-900 disabled:bg-slate-400"
+            disabled={manualBusy}
+            className={btnSecondaryClass}
           >
-            {isManualPending ? "Processing…" : "Accept manually"}
+            {manualBusy ? "Processing…" : "Accept manually"}
           </button>
-          {manualError && (
-            <p className="text-[10px] font-mono text-red-600 break-words">{manualError.message}</p>
-          )}
+          {manualError && <TxErrorAlert message={manualError} />}
         </div>
       </section>
     </div>

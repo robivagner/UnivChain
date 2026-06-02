@@ -5,29 +5,26 @@ pragma solidity ^0.8.25;
 /// @notice Manages the issuance of final academic diplomas as Soulbound Tokens (SBTs).
 /// @dev Implemented by the Certification contract to archive immutable academic achievements.
 interface ICertification {
-    /// @dev On-chain credential record; mirrors data anchored in off-chain JSON at `metadataURI`.
+    /// @dev On-chain credential record; rich fields (degree title, major, etc.) live in off-chain JSON at `metadataURI`.
     struct Diploma {
-        bytes32 documentHash; // keccak256 of the canonical diploma file (PDF/JSON)
-        string metadataURI; // ERC-721 token URI (typically IPFS or HTTPS JSON)
+        bytes32 documentHash; // optional keccak256 of canonical UTF-8 JSON bytes
+        string metadataURI; // ERC-721 token URI (IPFS/HTTPS JSON credential)
         uint256 totalCredits; // ECTS snapshot at graduation
         uint256 finalAverage; // GPA weighted average over passed subjects (× 100, e.g. 950 = 9.50)
         uint256 issueTimestamp; // block.timestamp at mint
-        string degreeTitle;
-        string major;
-        address issuer; // UniversityCore address at time of issuance
+        address issuer; // wallet that held DIPLOMA_ISSUER_ROLE at issuance
         bool revoked;
     }
 
     /// @notice Issues a non-transferable diploma after verifying academic requirements.
-    /// @dev Requires at least one of `documentHash` or non-empty `metadataURI`.
+    /// @dev Requires non-empty `metadataURI`. `documentHash` is optional (keccak256 of canonical JSON).
     function issueDiploma(
         address student,
-        string calldata degreeTitle,
-        string calldata major,
         uint256 credits,
         uint256 average,
         bytes32 documentHash,
-        string calldata metadataURI
+        string calldata metadataURI,
+        address issuer
     ) external;
 
     /// @notice Marks a diploma as revoked; ownership is retained for auditability.

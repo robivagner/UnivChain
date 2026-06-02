@@ -246,16 +246,6 @@ export const UniversityCoreABI = [
         "internalType": "address"
       },
       {
-        "name": "degreeTitle",
-        "type": "string",
-        "internalType": "string"
-      },
-      {
-        "name": "major",
-        "type": "string",
-        "internalType": "string"
-      },
-      {
         "name": "documentHash",
         "type": "bytes32",
         "internalType": "bytes32"

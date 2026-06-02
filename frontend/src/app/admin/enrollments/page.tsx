@@ -1,12 +1,5 @@
-import { PortalShell } from "@/components/layout/PortalShell";
-import { AdminEnrollmentsPanel } from "@/components/admin/AdminEnrollmentsPanel";
+import { redirect } from "next/navigation";
 
-export default function AdminEnrollmentsPage() {
-  return (
-    <PortalShell>
-      <div className="px-4 py-10">
-        <AdminEnrollmentsPanel />
-      </div>
-    </PortalShell>
-  );
+export default function AdminEnrollmentsRedirect() {
+  redirect("/admin#enrollments");
 }

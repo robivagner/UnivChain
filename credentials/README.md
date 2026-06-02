@@ -1,0 +1,25 @@
+# UnivChain diploma credentials (Variant B)
+
+Off-chain diplomas use **EIP-712 signed JSON** pinned at the on-chain `metadataURI`.
+
+## Format
+
+See [`examples/univchain-diploma.example.json`](examples/univchain-diploma.example.json).
+
+- **`proof.proofValue`** — issuer wallet signature over the typed `DiplomaCredential` struct
+- **`evidence.documentHash`** — `keccak256` of the JSON file with this field set to zero (matches on-chain `documentHash`)
+- **`studentIdHash`** (optional) — hash of the university matriculation number from `StudentRegistry`
+
+## Issuance flow
+
+1. Issuer portal builds and signs the credential (MetaMask / wallet).
+2. Download the JSON and pin it to IPFS (or host over HTTPS).
+3. Submit `graduateStudentAndIssueDiploma(student, documentHash, metadataURI)` on-chain.
+
+## Verification
+
+The public verifier checks:
+
+1. EIP-712 signature matches `issuer`
+2. Document hash matches pinned JSON
+3. On-chain diploma is valid (`isDiplomaValid`) and issuer matches

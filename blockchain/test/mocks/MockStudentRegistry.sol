@@ -2,20 +2,12 @@
 pragma solidity ^0.8.25;
 
 import {IStudentRegistry} from "../../src/interfaces/IStudentRegistry.sol";
-import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 
 contract MockStudentRegistry is IStudentRegistry {
     mapping(address => bool) private s_enrolled;
     mapping(address => bool) private s_graduated;
     mapping(address => bool) private s_expelled;
     mapping(address => uint256) private s_tokenIds;
-
-    // Trebuie să simuleze că suportă interfața ERC721 pentru că UniversityCore verifică asta
-    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
-        return interfaceId == type(IERC721).interfaceId || interfaceId == type(IERC165).interfaceId
-            || interfaceId == 0xb45a3c0e;
-    }
 
     function isStudentEnrolled(address student) external view returns (bool) {
         return s_enrolled[student];

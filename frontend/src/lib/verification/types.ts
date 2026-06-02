@@ -11,9 +11,15 @@ export type VerificationReport = {
   totalCredits?: bigint;
   documentHash?: `0x${string}`;
   metadataURI?: string;
+  /** True when canonical credential hash matches on-chain documentHash. */
+  metadataHashMatch?: boolean;
+  /** True when EIP-712 proof verifies against credential.issuer. */
+  signatureValid?: boolean;
+  /** True when credential.issuer matches on-chain diploma.issuer. */
+  issuerMatchesCredential?: boolean;
   issueTimestamp?: Date;
   revoked?: boolean;
   facultyName?: string;
-  issuerCoreAddress?: `0x${string}`;
+  issuerAddress?: `0x${string}`;
   certificationAddress?: `0x${string}`;
 };

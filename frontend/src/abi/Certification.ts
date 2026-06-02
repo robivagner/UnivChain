@@ -118,16 +118,6 @@ export const CertificationABI = [
             "internalType": "uint256"
           },
           {
-            "name": "degreeTitle",
-            "type": "string",
-            "internalType": "string"
-          },
-          {
-            "name": "major",
-            "type": "string",
-            "internalType": "string"
-          },
-          {
             "name": "issuer",
             "type": "address",
             "internalType": "address"
@@ -304,16 +294,6 @@ export const CertificationABI = [
         "internalType": "address"
       },
       {
-        "name": "degreeTitle",
-        "type": "string",
-        "internalType": "string"
-      },
-      {
-        "name": "major",
-        "type": "string",
-        "internalType": "string"
-      },
-      {
         "name": "credits",
         "type": "uint256",
         "internalType": "uint256"
@@ -332,6 +312,11 @@ export const CertificationABI = [
         "name": "metadataURI",
         "type": "string",
         "internalType": "string"
+      },
+      {
+        "name": "issuer",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "outputs": [],

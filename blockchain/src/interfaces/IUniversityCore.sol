@@ -89,12 +89,10 @@ interface IUniversityCore {
 
     /// @notice Gateway function to finalize a student's studies and issue their degree.
     /// @dev Can only be called by a Diploma Issuer. Mints the diploma SBT then burns the identity SBT.
-    /// @param documentHash keccak256 of the canonical off-chain diploma file the university issued.
-    /// @param metadataURI ERC-721 metadata URI (e.g. IPFS JSON) describing the credential.
+    /// @param documentHash Optional keccak256 of canonical UTF-8 JSON bytes (0 if relying on IPFS CID alone).
+    /// @param metadataURI ERC-721 metadata URI (IPFS/HTTPS JSON) describing the credential.
     function graduateStudentAndIssueDiploma(
         address student,
-        string calldata degreeTitle,
-        string calldata major,
         bytes32 documentHash,
         string calldata metadataURI
     ) external;

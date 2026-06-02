@@ -2,8 +2,8 @@
 pragma solidity ^0.8.25;
 
 /// @title Interface for University Identity Management
-/// @notice Defines the student structure and core identity functions for Soulbound Tokens.
-/// @dev Implemented by the StudentRegistry contract to manage student lifecycle as SBTs.
+/// @notice Defines the student structure and enrollment lifecycle in contract storage.
+/// @dev Implemented by the StudentRegistry contract to manage student status records.
 interface IStudentRegistry {
     /// @dev Core data structure defining a student's academic status.
     struct Student {
@@ -14,24 +14,24 @@ interface IStudentRegistry {
         bool isExpelled; // True if the student was removed from the university
     }
 
-    /// @notice Issues a new Soulbound NFT to a student, acting as their digital university ID.
+    /// @notice Registers a student as actively enrolled.
     /// @dev Can only be called by the UniversityCore contract.
     /// @param student The wallet address of the student.
     /// @param studentIdHash The hash of the unique university registration ID (matricola).
     function enrollStudent(address student, bytes32 studentIdHash) external;
 
     /// @notice Finalizes a student's academic journey upon receiving a diploma.
-    /// @dev Burns the active student NFT and updates the graduation metadata.
+    /// @dev Marks the student inactive and updates graduation metadata.
     /// @param student The wallet address of the graduating student.
     function graduateStudent(address student) external;
 
-    /// @notice Revokes a student's academic status due to disciplinary actions.
-    /// @dev Burns the student's NFT token and permanently marks 'isExpelled' as true.
+    /// @notice Revokes a student's active enrollment due to disciplinary actions.
+    /// @dev Marks the student inactive and permanently sets `isExpelled`.
     /// @param student The wallet address of the expelled student.
     function expellStudent(address student) external;
 
-    /// @notice Fetches the full metadata record of a student by their Token ID.
-    /// @param tokenId The Soulbound NFT token identifier.
+    /// @notice Fetches the full metadata record of a student by their record ID.
+    /// @param tokenId The sequential student record identifier.
     /// @return studentIdHash The hashed matriculation number.
     /// @return registrationTimestamp The block timestamp of enrollment.
     /// @return graduationTimestamp The block timestamp of graduation (0 if not graduated).
@@ -52,9 +52,9 @@ interface IStudentRegistry {
     /// @return coreAddress The address of the Core contract.
     function getUniversityCoreContract() external view returns (address coreAddress);
 
-    /// @notice Checks if a student currently holds an active identity NFT.
+    /// @notice Checks if a student is currently enrolled and active.
     /// @param student The wallet address to query.
-    /// @return isEnrolled True if the student is currently enrolled and has an active token.
+    /// @return isEnrolled True if the student is actively enrolled.
     function isStudentEnrolled(address student) external view returns (bool isEnrolled);
 
     /// @notice Checks if a student has been expelled from the university.
@@ -67,8 +67,8 @@ interface IStudentRegistry {
     /// @return hasGraduated True if the student is marked as graduated.
     function hasStudentGraduated(address student) external view returns (bool hasGraduated);
 
-    /// @notice Retrieves the unique Token ID associated with a student address.
+    /// @notice Retrieves the sequential record ID associated with a student address.
     /// @param student The wallet address of the student.
-    /// @return tokenId The associated ERC721 token identifier.
+    /// @return tokenId The student record identifier (0 if never registered).
     function getStudentTokenId(address student) external view returns (uint256 tokenId);
 }

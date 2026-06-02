@@ -75,18 +75,20 @@ contract Certification is ICertification, SoulboundNFT {
     /// @inheritdoc ICertification
     function issueDiploma(
         address student,
-        string calldata degreeTitle,
-        string calldata major,
         uint256 credits,
         uint256 weightedAverage,
         bytes32 documentHash,
-        string calldata metadataURI
+        string calldata metadataURI,
+        address issuer
     ) external onlyCore {
         if (s_studentToDiplomaId[student] != 0) {
             revert Certification__StudentAlreadyHasDiploma(student);
         }
-        if (documentHash == bytes32(0) && bytes(metadataURI).length == 0) {
+        if (bytes(metadataURI).length == 0) {
             revert Certification__InvalidCredentialAnchor();
+        }
+        if (issuer == address(0)) {
+            revert Certification__AddressZero();
         }
         if (credits < i_creditsRequiredForGraduation) {
             revert Certification__NotEnoughCredits(student, credits);
@@ -105,9 +107,7 @@ contract Certification is ICertification, SoulboundNFT {
             totalCredits: credits,
             finalAverage: weightedAverage,
             issueTimestamp: block.timestamp,
-            degreeTitle: degreeTitle,
-            major: major,
-            issuer: address(i_coreContract),
+            issuer: issuer,
             revoked: false
         });
 

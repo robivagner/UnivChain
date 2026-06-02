@@ -115,11 +115,9 @@ contract IntegrationTest is Test {
 
         // Step 6: Issuer Finalizes Studies
         vm.prank(issuerFuzz);
-        core.graduateStudentAndIssueDiploma(
-            studentFuzz, "B.Sc. Engineer", "Computer Science", DIPLOMA_DOC_HASH, DIPLOMA_META_URI
-        );
+        core.graduateStudentAndIssueDiploma(studentFuzz, DIPLOMA_DOC_HASH, DIPLOMA_META_URI);
 
-        // Assertions: Identity burned, Diploma minted
+        // Assertions: enrollment closed, diploma minted
         assertFalse(registry.isStudentEnrolled(studentFuzz));
         assertTrue(registry.hasStudentGraduated(studentFuzz));
         assertEq(certification.balanceOf(studentFuzz), 1);
@@ -130,13 +128,11 @@ contract IntegrationTest is Test {
 
         assertEq(diploma.finalAverage, uint256(grade) * 100);
         assertEq(diploma.totalCredits, CREDITS_REQUIRED);
-        assertEq(diploma.degreeTitle, "B.Sc. Engineer");
-        assertEq(diploma.major, "Computer Science");
         assertEq(diploma.issueTimestamp, block.timestamp);
         assertTrue(certification.isDiplomaValid(tokenId));
         assertEq(certification.tokenURI(tokenId), DIPLOMA_META_URI);
         assertEq(diploma.documentHash, DIPLOMA_DOC_HASH);
-        assertEq(diploma.issuer, address(core));
+        assertEq(diploma.issuer, issuerFuzz);
     }
 
     ///////////////////////////////////////////
@@ -262,17 +258,13 @@ contract IntegrationTest is Test {
         _completeCurriculumForGraduation(student, professor, 10);
 
         vm.prank(issuer);
-        core.graduateStudentAndIssueDiploma(
-            student, "Engineer", "Computer Science", DIPLOMA_DOC_HASH, DIPLOMA_META_URI
-        );
+        core.graduateStudentAndIssueDiploma(student, DIPLOMA_DOC_HASH, DIPLOMA_META_URI);
 
         vm.prank(issuer);
         vm.expectRevert(
             abi.encodeWithSelector(UniversityCore.UniversityCore__StudentHasAlreadyGraduated.selector, student)
         );
-        core.graduateStudentAndIssueDiploma(
-            student, "Engineer", "Computer Science", DIPLOMA_DOC_HASH, DIPLOMA_META_URI
-        );
+        core.graduateStudentAndIssueDiploma(student, DIPLOMA_DOC_HASH, DIPLOMA_META_URI);
     }
 
     function test_AdminRevokeDiplomaThroughCore() public {
@@ -288,9 +280,7 @@ contract IntegrationTest is Test {
         _completeCurriculumForGraduation(student, professor, 10);
 
         vm.prank(issuer);
-        core.graduateStudentAndIssueDiploma(
-            student, "Engineer", "Computer Science", DIPLOMA_DOC_HASH, DIPLOMA_META_URI
-        );
+        core.graduateStudentAndIssueDiploma(student, DIPLOMA_DOC_HASH, DIPLOMA_META_URI);
 
         uint256 tokenId = certification.getDiplomaIdForStudent(student);
         assertTrue(certification.isDiplomaValid(tokenId));
@@ -327,9 +317,7 @@ contract IntegrationTest is Test {
                 Certification.Certification__NotEnoughCredits.selector, student, uint256(SUBJECT_ECTS)
             )
         );
-        core.graduateStudentAndIssueDiploma(
-            student, "Engineer", "Computer Science", DIPLOMA_DOC_HASH, DIPLOMA_META_URI
-        );
+        core.graduateStudentAndIssueDiploma(student, DIPLOMA_DOC_HASH, DIPLOMA_META_URI);
 
         assertTrue(registry.isStudentEnrolled(student));
         assertFalse(registry.hasStudentGraduated(student));

@@ -15,12 +15,11 @@ contract MockCertification is ICertification {
 
     function issueDiploma(
         address student,
-        string calldata,
-        string calldata,
         uint256,
         uint256,
         bytes32,
-        string calldata
+        string calldata,
+        address
     ) external {
         s_hasDiploma[student] = true;
     }
@@ -30,12 +29,10 @@ contract MockCertification is ICertification {
     function getDiploma(uint256) external pure returns (Diploma memory) {
         return Diploma({
             documentHash: bytes32(0),
-            metadataURI: "",
+            metadataURI: "ipfs://mock",
             totalCredits: 180,
             finalAverage: 950,
             issueTimestamp: 0,
-            degreeTitle: "B.Sc.",
-            major: "CS",
             issuer: address(0),
             revoked: false
         });

@@ -4,14 +4,13 @@ pragma solidity ^0.8.25;
 
 import {IStudentRegistry} from "../interfaces/IStudentRegistry.sol";
 import {IUniversityCore} from "../interfaces/IUniversityCore.sol";
-import {SoulboundNFT} from "../shared/SoulboundNFT.sol";
 
 /**
  * @title StudentRegistry
- * @notice Manages student on-chain identities by minting non-transferable Soulbound tokens upon enrollment.
- * @dev Inherits custom SoulboundNFT logic and links tightly to UniversityCore for access control.
+ * @notice Manages student on-chain enrollment status and identity metadata in contract storage.
+ * @dev Only UniversityCore may mutate records. Diplomas remain soulbound NFTs in Certification.
  */
-contract StudentRegistry is IStudentRegistry, SoulboundNFT {
+contract StudentRegistry is IStudentRegistry {
     // Errors
     error StudentRegistry__NotCore(address sender);
     error StudentRegistry__AddressZero();
@@ -27,6 +26,7 @@ contract StudentRegistry is IStudentRegistry, SoulboundNFT {
     uint256 public s_tokenIdCounter;
     mapping(uint256 tokenId => Student) public s_students;
     mapping(address student => uint256 tokenId) public s_studentToTokenId;
+    mapping(address student => bool isActive) public s_studentIsActive;
 
     // Events
     event StudentEnrolled(address indexed student, uint256 indexed tokenId);
@@ -42,10 +42,10 @@ contract StudentRegistry is IStudentRegistry, SoulboundNFT {
     }
 
     /**
-     * @notice Constructor sets the tracking rules and links the master routing Hub.
+     * @notice Links this module to the central hub that orchestrates enrollment workflows.
      * @param coreContract The central execution contract managing roles tracking.
      */
-    constructor(address coreContract) SoulboundNFT("StudentRegistry", "SR") {
+    constructor(address coreContract) {
         if (coreContract == address(0)) {
             revert StudentRegistry__AddressZero();
         }
@@ -64,7 +64,7 @@ contract StudentRegistry is IStudentRegistry, SoulboundNFT {
 
         uint256 tokenId = s_tokenIdCounter++;
         s_studentToTokenId[student] = tokenId;
-        _mint(student, tokenId);
+        s_studentIsActive[student] = true;
 
         s_students[tokenId] = Student({
             studentIdHash: studentIdHash,
@@ -87,8 +87,7 @@ contract StudentRegistry is IStudentRegistry, SoulboundNFT {
         }
         s.hasGraduated = true;
         s.graduationTimestamp = block.timestamp;
-
-        _burn(tokenId);
+        s_studentIsActive[student] = false;
 
         emit StudentGraduated(student, tokenId);
     }
@@ -102,8 +101,7 @@ contract StudentRegistry is IStudentRegistry, SoulboundNFT {
         }
 
         s_students[tokenId].isExpelled = true;
-
-        _burn(tokenId);
+        s_studentIsActive[student] = false;
 
         emit StudentRevoked(student, tokenId);
     }
@@ -114,6 +112,9 @@ contract StudentRegistry is IStudentRegistry, SoulboundNFT {
 
     /// @inheritdoc IStudentRegistry
     function getStudentMetadata(uint256 tokenId) external view returns (bytes32, uint256, uint256, bool, bool) {
+        if (tokenId == 0 || tokenId >= s_tokenIdCounter) {
+            revert StudentRegistry__InvalidTokenId(tokenId);
+        }
         Student memory s = s_students[tokenId];
         return (s.studentIdHash, s.registrationTimestamp, s.graduationTimestamp, s.hasGraduated, s.isExpelled);
     }
@@ -130,18 +131,24 @@ contract StudentRegistry is IStudentRegistry, SoulboundNFT {
 
     /// @inheritdoc IStudentRegistry
     function isStudentEnrolled(address student) external view returns (bool) {
-        return balanceOf(student) != 0;
+        return s_studentIsActive[student];
     }
 
     /// @inheritdoc IStudentRegistry
     function isStudentExpelled(address student) external view returns (bool) {
         uint256 tokenId = s_studentToTokenId[student];
+        if (tokenId == 0) {
+            return false;
+        }
         return s_students[tokenId].isExpelled;
     }
 
     /// @inheritdoc IStudentRegistry
     function hasStudentGraduated(address student) external view returns (bool) {
         uint256 tokenId = s_studentToTokenId[student];
+        if (tokenId == 0) {
+            return false;
+        }
         return s_students[tokenId].hasGraduated;
     }
 
@@ -150,7 +157,7 @@ contract StudentRegistry is IStudentRegistry, SoulboundNFT {
     /////////////////////////////////
 
     function _assertCanEnroll(address student) private view {
-        if (balanceOf(student) != 0) {
+        if (s_studentIsActive[student]) {
             revert StudentRegistry__StudentAlreadyEnrolled(student);
         }
 
@@ -170,7 +177,7 @@ contract StudentRegistry is IStudentRegistry, SoulboundNFT {
 
     function _requireActiveStudent(address student) private view returns (uint256 tokenId) {
         tokenId = s_studentToTokenId[student];
-        if (tokenId == 0 || balanceOf(student) == 0) {
+        if (tokenId == 0 || !s_studentIsActive[student]) {
             revert StudentRegistry__StudentNotEnrolled(student);
         }
     }

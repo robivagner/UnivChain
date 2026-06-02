@@ -2,13 +2,8 @@
 pragma solidity ^0.8.25;
 
 import {Test} from "forge-std/Test.sol";
-import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
-import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import {IERC5192} from "../../src/interfaces/IERC5192.sol";
-import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 
 import {StudentRegistry} from "../../src/modules/StudentRegistry.sol";
-import {SoulboundNFT} from "../../src/shared/SoulboundNFT.sol";
 
 contract StudentRegistryTest is Test {
     StudentRegistry public registry;
@@ -36,19 +31,15 @@ contract StudentRegistryTest is Test {
     /////// Enroll Functions ///////
     ////////////////////////////////
 
-    /// @notice Verifies that a student can be successfully enrolled and their Soulbound Identity NFT is minted.
     function test_EnrollStudentSuccess() public {
         vm.prank(core);
         registry.enrollStudent(student, STUDENT_ID_HASH);
 
-        // Verify ERC721 properties
         uint256 tokenId = registry.getStudentTokenId(student);
         assertEq(tokenId, 1);
-        assertEq(registry.balanceOf(student), 1);
-        assertEq(registry.ownerOf(tokenId), student);
         assertTrue(registry.isStudentEnrolled(student));
+        assertTrue(registry.s_studentIsActive(student));
 
-        // Verify the stored internal state of the student record
         (bytes32 hash, uint256 regTimestamp, uint256 gradTimestamp, bool hasGraduated, bool isExpelled) =
             registry.getStudentMetadata(tokenId);
 
@@ -65,28 +56,30 @@ contract StudentRegistryTest is Test {
         registry.enrollStudent(student, STUDENT_ID_HASH);
     }
 
+    function test_RevertGetStudentMetadataInvalidTokenId() public {
+        vm.expectRevert(abi.encodeWithSelector(StudentRegistry.StudentRegistry__InvalidTokenId.selector, 0));
+        registry.getStudentMetadata(0);
+    }
+
     //////////////////////////////////
     /////// Graduate Functions ///////
     //////////////////////////////////
 
-    /// @notice Ensures graduating a student updates their status correctly and securely burns their Identity NFT.
     function test_GraduateStudentSuccess() public {
         vm.startPrank(core);
         registry.enrollStudent(student, STUDENT_ID_HASH);
         uint256 tokenId = registry.getStudentTokenId(student);
 
-        // Advance blockchain time to simulate the passage of an academic year
         skip(365 days);
         uint256 gradTime = block.timestamp;
 
         registry.graduateStudent(student);
         vm.stopPrank();
 
-        // NFT is burned upon graduation based on the _burn logic in the contract
-        assertEq(registry.balanceOf(student), 0);
+        assertFalse(registry.isStudentEnrolled(student));
+        assertFalse(registry.s_studentIsActive(student));
         assertTrue(registry.hasStudentGraduated(student));
 
-        // Verify the updated metadata confirms the graduation timestamp
         (,, uint256 gradTimestamp, bool hasGraduated, bool isExpelled) = registry.getStudentMetadata(tokenId);
 
         assertEq(gradTimestamp, gradTime);
@@ -132,7 +125,6 @@ contract StudentRegistryTest is Test {
     /////// Expell Functions ///////
     ////////////////////////////////
 
-    /// @notice Tests if the expulsion mechanism correctly burns the Identity NFT and flags the student.
     function test_ExpellStudentSuccess() public {
         vm.startPrank(core);
         registry.enrollStudent(student, STUDENT_ID_HASH);
@@ -141,8 +133,7 @@ contract StudentRegistryTest is Test {
         registry.expellStudent(student);
         vm.stopPrank();
 
-        // NFT must be burned upon expulsion
-        assertEq(registry.balanceOf(student), 0);
+        assertFalse(registry.isStudentEnrolled(student));
         assertTrue(registry.isStudentExpelled(student));
 
         (,,,, bool isExpelled) = registry.getStudentMetadata(tokenId);
@@ -153,22 +144,6 @@ contract StudentRegistryTest is Test {
         vm.prank(core);
         vm.expectRevert(abi.encodeWithSelector(StudentRegistry.StudentRegistry__StudentNotEnrolled.selector, alice));
         registry.expellStudent(alice);
-    }
-
-    ////////////////////////////////////
-    /////// Soulbound Constraint ///////
-    ////////////////////////////////////
-
-    /// @notice Verifies the core security assumption: a university ID NFT cannot be transferred.
-    function test_RevertIfStudentAttemptsTransfer() public {
-        vm.startPrank(core);
-        registry.enrollStudent(student, STUDENT_ID_HASH);
-        uint256 tokenId = registry.getStudentTokenId(student);
-        vm.stopPrank();
-
-        vm.prank(student);
-        vm.expectRevert(SoulboundNFT.SoulBoundNFT__NotAuthorized.selector);
-        registry.transferFrom(student, alice, tokenId);
     }
 
     //////////////////////////////
@@ -195,51 +170,27 @@ contract StudentRegistryTest is Test {
         assertFalse(registry.hasStudentGraduated(student));
     }
 
-    function test_SupportsInterfaceERC721andERC165() public view {
-        assertTrue(registry.supportsInterface(type(IERC721).interfaceId));
-        assertTrue(registry.supportsInterface(type(IERC165).interfaceId));
-        assertTrue(registry.supportsInterface(0xb45a3c0e));
-        assertFalse(registry.supportsInterface(0xffffffff));
-    }
-
-    function test_EnrollEmitsLockedEvent() public {
-        vm.expectEmit(true, false, false, true);
-        emit IERC5192.Locked(1);
-
-        vm.prank(core);
-        registry.enrollStudent(student, STUDENT_ID_HASH);
-
-        assertTrue(registry.locked(1));
-    }
-
     ///////////////////////////////////
     /////// Fuzz Tests ////////////////
     ///////////////////////////////////
 
-    /// @notice A complete lifecycle fuzz test validating enrollment, time passage, and final state changes
-    /// (graduation or expulsion) with dynamic inputs.
     function testFuzz_CompleteStudentLifecycle(
         address randomStudent,
         bytes32 randomHash,
         uint256 timeJump,
         bool simulateExpulsion
     ) public {
-        // Bound constraints to prevent address zero issues and extreme time travels
         vm.assume(randomStudent != address(0));
-        uint256 skipTime = bound(timeJump, 1 days, 3650 days); // 1 to 10 years
+        uint256 skipTime = bound(timeJump, 1 days, 3650 days);
 
-        // 1. Enrollment
         vm.startPrank(core);
         registry.enrollStudent(randomStudent, randomHash);
         uint256 tokenId = registry.getStudentTokenId(randomStudent);
 
         assertTrue(registry.isStudentEnrolled(randomStudent));
-        assertEq(registry.ownerOf(tokenId), randomStudent);
 
-        // Simulate time passing (e.g., student studying)
         skip(skipTime);
 
-        // 2. Lifecycle End (Graduation OR Expulsion based on fuzzing param)
         if (simulateExpulsion) {
             registry.expellStudent(randomStudent);
 
@@ -253,13 +204,11 @@ contract StudentRegistryTest is Test {
             assertFalse(registry.isStudentEnrolled(randomStudent));
             assertFalse(registry.isStudentExpelled(randomStudent));
 
-            // Check if the graduation timestamp recorded properly
             (,, uint256 gradTimestamp,,) = registry.getStudentMetadata(tokenId);
             assertEq(gradTimestamp, block.timestamp);
         }
         vm.stopPrank();
 
-        // 3. Final Security Assertion: In both lifecycle ends, the NFT MUST be burned
-        assertEq(registry.balanceOf(randomStudent), 0);
+        assertFalse(registry.isStudentEnrolled(randomStudent));
     }
 }

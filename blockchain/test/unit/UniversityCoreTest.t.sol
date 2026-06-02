@@ -136,18 +136,6 @@ contract UniversityCoreTest is Test {
         );
     }
 
-    function test_RevertInitializeMissingERC721SupportRegistry() public {
-        vm.prank(admin);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                UniversityCore.UniversityCore__ContractDoesNotSupportIERC721.selector, address(invalidModule)
-            )
-        );
-        core.initializeCore(
-            address(invalidModule), address(mockGradebook), address(mockCertification), address(mockFeeManager)
-        );
-    }
-
     function test_RevertInitializeMissingERC721SupportCertification() public {
         vm.prank(admin);
         vm.expectRevert(
@@ -157,18 +145,6 @@ contract UniversityCoreTest is Test {
         );
         core.initializeCore(
             address(mockRegistry), address(mockGradebook), address(invalidModule), address(mockFeeManager)
-        );
-    }
-
-    function test_RevertInitializeMissingERC5192SupportRegistry() public {
-        vm.prank(admin);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                UniversityCore.UniversityCore__ContractDoesNotSupportIERC5192.selector, address(erc721OnlyModule)
-            )
-        );
-        core.initializeCore(
-            address(erc721OnlyModule), address(mockGradebook), address(mockCertification), address(mockFeeManager)
         );
     }
 

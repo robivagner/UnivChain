@@ -8,6 +8,21 @@ import { StudentRegistryABI } from "@/abi/StudentRegistry";
 import { FeeManagerABI } from "@/abi/FeeManager";
 import { getDeployment } from "@/lib/contracts";
 import { useLiveContractReads } from "@/lib/useLiveContractReads";
+import {
+  enrollmentButtonLabel,
+  enrollmentStepMessage,
+  type EnrollmentFlowPhase,
+} from "@/lib/enrollment/enrollmentFlow";
+import { formatTxError } from "@/lib/wallet/formatTxError";
+import { waitForSuccessfulTx } from "@/lib/wallet/runContractTx";
+import { TxErrorAlert } from "@/components/shared/TxErrorAlert";
+import {
+  alertWarningClass,
+  btnSuccessClass,
+  btnVioletClass,
+  messageBoxClass,
+  portalCardClass,
+} from "@/lib/ui/portalClasses";
 
 const MOCK_ERC20_MINT_ABI = [
   {
@@ -24,18 +39,23 @@ const MOCK_ERC20_MINT_ABI = [
 
 const REGISTRATION_FEE_FALLBACK = 10_000_000n; // 10 USDC (6 decimals), matches SetupAnvilDev
 
-export function StudentEnrollmentPanel() {
+export function StudentEnrollmentPanel({ embedded = false }: { embedded?: boolean }) {
   const { address, isConnected, chainId } = useAccount();
   const publicClient = usePublicClient();
   const deployment = chainId !== undefined ? getDeployment(chainId) : undefined;
   const enrollmentToken = deployment?.enrollmentToken;
 
   const [stepMessage, setStepMessage] = useState<string | null>(null);
+  const [flowPhase, setFlowPhase] = useState<EnrollmentFlowPhase>("idle");
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [isMinting, setIsMinting] = useState(false);
+
+  const isProcessing = flowPhase !== "idle" || isMinting;
 
   const checksEnabled = Boolean(deployment && address && enrollmentToken);
   const { invalidate } = useLiveContractReads(checksEnabled);
 
-  const { writeContractAsync, isPending, error: writeError, reset } = useWriteContract();
+  const { writeContractAsync, isPending, reset } = useWriteContract();
 
   const readQuery = { enabled: checksEnabled };
 
@@ -92,6 +112,7 @@ export function StudentEnrollmentPanel() {
   const alreadyEnrolled = Boolean(isEnrolled);
 
   const requestDisabled =
+    isProcessing ||
     isPending ||
     !isConnected ||
     !networkConfigured ||
@@ -99,36 +120,46 @@ export function StudentEnrollmentPanel() {
     alreadyRequested ||
     needsMint;
 
-  const requestButtonLabel = (() => {
-    if (isPending) return "Processing...";
-    if (alreadyEnrolled) return "Already enrolled";
-    if (alreadyRequested) return "Already requested enrollment";
-    if (needsApprove) return "Approve & request enrollment";
-    return "Request enrollment";
-  })();
+  const requestButtonLabel = enrollmentButtonLabel(flowPhase, {
+    alreadyEnrolled,
+    alreadyRequested,
+    needsApprove,
+  });
+
+  const flowStepMessage = enrollmentStepMessage(flowPhase) ?? stepMessage;
 
   const waitAndRefresh = async (hash: `0x${string}`) => {
     if (!publicClient) return;
-    await publicClient.waitForTransactionReceipt({ hash });
+    await waitForSuccessfulTx(publicClient, hash);
     await invalidate();
   };
 
   const handleMintTestUsdc = async () => {
     if (!deployment?.enrollmentToken || !address || !publicClient) return;
     reset();
+    setLocalError(null);
+    setIsMinting(true);
     setStepMessage("Minting test tokens...");
-    const amount = effectiveFee * 2n;
-    const hash = await writeContractAsync({
-      address: deployment.enrollmentToken,
-      abi: MOCK_ERC20_MINT_ABI,
-      functionName: "mint",
-      args: [address, amount],
-    });
-    await waitAndRefresh(hash);
-    setStepMessage("Mock USDC received in your wallet.");
+    try {
+      const amount = effectiveFee * 2n;
+      const hash = await writeContractAsync({
+        address: deployment.enrollmentToken,
+        abi: MOCK_ERC20_MINT_ABI,
+        functionName: "mint",
+        args: [address, amount],
+      });
+      await waitAndRefresh(hash);
+      setStepMessage("Mock USDC received in your wallet.");
+    } catch (e) {
+      setStepMessage(null);
+      setLocalError(formatTxError(e));
+    } finally {
+      setIsMinting(false);
+    }
   };
 
   const handleRequestEnrollment = async () => {
+    if (isProcessing || isPending) return;
     if (!isConnected || !deployment?.enrollmentToken || !address || !publicClient) {
       alert("Connect your wallet on Anvil (31337) and run: make setup-dev");
       return;
@@ -155,35 +186,52 @@ export function StudentEnrollmentPanel() {
     }
 
     reset();
+    setLocalError(null);
+    setStepMessage(null);
+
     try {
-      if (allowed < effectiveFee) {
-        setStepMessage("Approving fee transfer...");
+      let currentAllowance = allowed;
+
+      if (currentAllowance < effectiveFee) {
+        setFlowPhase("approve-sign");
         const approveHash = await writeContractAsync({
           address: deployment.enrollmentToken,
           abi: erc20Abi,
           functionName: "approve",
           args: [deployment.universityCore, effectiveFee],
         });
-        await waitAndRefresh(approveHash);
+        setFlowPhase("approve-confirm");
+        await waitForSuccessfulTx(publicClient, approveHash);
+        await invalidate();
+        currentAllowance = effectiveFee;
       }
 
-      setStepMessage("Submitting enrollment request...");
+      if (currentAllowance < effectiveFee) {
+        throw new Error("USDC approval did not complete. Try again.");
+      }
+
+      setFlowPhase("enroll-sign");
       const enrollHash = await writeContractAsync({
         address: deployment.universityCore,
         abi: UniversityCoreABI,
         functionName: "requestEnrollment",
         args: [deployment.enrollmentToken],
       });
-      await waitAndRefresh(enrollHash);
+      setFlowPhase("enroll-confirm");
+      await waitForSuccessfulTx(publicClient, enrollHash);
+      await invalidate();
       setStepMessage("Request submitted. An admin can accept your enrollment.");
-    } catch {
+    } catch (e) {
       setStepMessage(null);
+      setLocalError(formatTxError(e));
+    } finally {
+      setFlowPhase("idle");
     }
   };
 
   if (!enrollmentToken) {
     return (
-      <div className="p-6 bg-amber-50 rounded-xl border border-amber-200 w-full max-w-md text-sm text-amber-900">
+      <div className={`${alertWarningClass} w-full max-w-md text-sm`}>
         <p className="font-semibold mb-1">Enrollment token missing</p>
         <p>
           Run <span className="font-mono">make setup-dev</span> then{" "}
@@ -194,32 +242,38 @@ export function StudentEnrollmentPanel() {
   }
 
   return (
-    <div className="p-6 bg-white rounded-xl shadow-md border border-gray-200 w-full max-w-md">
-      <h2 className="text-xl font-bold mb-2 text-gray-800">Student: Request enrollment</h2>
-      <p className="text-xs text-slate-500 mb-4">
-        Pay the fee in Mock USDC; an admin accepts with your matriculation number.
-      </p>
+    <div
+      className={`${portalCardClass} w-full ${embedded ? "" : "max-w-md"}`}
+    >
+      {!embedded && (
+        <>
+          <h2 className="portal-page-title !text-xl mb-2">Student: Request enrollment</h2>
+          <p className="text-xs text-uc-muted mb-4">
+            Pay the fee in Mock USDC; an admin accepts with your matriculation number.
+          </p>
+        </>
+      )}
 
       <div className="flex flex-col gap-4">
-        <div className="text-[10px] text-gray-500 uppercase tracking-wider">
+        <div className="text-[10px] text-uc-muted uppercase tracking-wider">
           Network:{" "}
-          <span className="font-mono text-blue-600">
+          <span className="font-mono text-uc-cyan">
             {chainId ?? "—"} {networkConfigured ? "✓" : "(not configured)"}
           </span>
         </div>
 
         {address && (
-          <div className="text-[10px] text-gray-400 font-mono break-all">Wallet: {address}</div>
+          <div className="text-[10px] text-uc-muted/80 font-mono break-all">Wallet: {address}</div>
         )}
 
-        <div className="text-xs space-y-1 text-slate-700">
+        <div className="text-xs space-y-1 text-uc-muted">
           <p className="font-mono text-[10px] break-all">Token: {enrollmentToken}</p>
           <p>Fee: {feeDisplay} USDC</p>
           <p>Balance: {formatUnits(balance, 6)} USDC</p>
-          <p className={hasPaidFee ? "text-green-700" : "text-slate-600"}>
+          <p className={hasPaidFee ? "text-emerald-300" : ""}>
             Request submitted: {hasPaidFee ? "yes" : "no"}
           </p>
-          <p className={isEnrolled ? "text-green-700" : "text-slate-600"}>
+          <p className={isEnrolled ? "text-emerald-300" : ""}>
             Enrolled: {isEnrolled ? "yes" : "no"}
           </p>
         </div>
@@ -228,10 +282,10 @@ export function StudentEnrollmentPanel() {
           <button
             type="button"
             onClick={handleMintTestUsdc}
-            disabled={isPending}
-            className="py-2 rounded font-semibold text-white bg-violet-600 hover:bg-violet-700 disabled:bg-gray-400"
+            disabled={isProcessing || isPending}
+            className={btnVioletClass}
           >
-            {isPending ? "Processing..." : "Get Mock USDC (test)"}
+            {isMinting ? "Processing…" : "Get Mock USDC (test)"}
           </button>
         )}
 
@@ -239,26 +293,14 @@ export function StudentEnrollmentPanel() {
           type="button"
           onClick={handleRequestEnrollment}
           disabled={requestDisabled}
-          className={`py-2 rounded font-semibold transition ${
-            requestDisabled
-              ? "bg-slate-300 text-slate-600 cursor-not-allowed"
-              : "bg-emerald-600 hover:bg-emerald-700 text-white"
-          }`}
+          className={requestDisabled ? "portal-btn portal-btn-secondary w-full opacity-50 cursor-not-allowed" : btnSuccessClass}
         >
           {requestButtonLabel}
         </button>
 
-        {stepMessage && (
-          <p className="text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded p-2">
-            {stepMessage}
-          </p>
-        )}
+        {flowStepMessage && <p className={messageBoxClass}>{flowStepMessage}</p>}
 
-        {writeError && (
-          <div className="p-2 bg-red-50 border border-red-100 rounded">
-            <p className="text-red-600 text-[10px] font-mono break-words">{writeError.message}</p>
-          </div>
-        )}
+        {localError && <TxErrorAlert message={localError} />}
       </div>
     </div>
   );

@@ -14,13 +14,14 @@ contract CertificationTest is Test {
     Certification public certification;
 
     address public core = makeAddr("universityCore");
+    address public issuer = makeAddr("diplomaIssuer");
     address public student = makeAddr("studentAbsolvent");
     address public alice = makeAddr("alice");
 
     uint256 public constant CREDITS_REQUIRED = 180;
     uint256 public constant MINIMUM_AVERAGE = 500;
 
-    bytes32 public constant DOC_HASH = keccak256("univchain-diploma-pdf-v1");
+    bytes32 public constant DOC_HASH = keccak256("univchain-diploma-json-v1");
     string public constant META_URI = "ipfs://QmUnivChainDiploma/metadata.json";
 
     function setUp() public {
@@ -29,7 +30,7 @@ contract CertificationTest is Test {
 
     function _issueDefaultDiploma(address who, uint256 credits, uint256 avg) internal {
         vm.prank(core);
-        certification.issueDiploma(who, "Bachelor of IT", "Information Technology", credits, avg, DOC_HASH, META_URI);
+        certification.issueDiploma(who, credits, avg, DOC_HASH, META_URI, issuer);
     }
 
     function test_RevertIfConstructorCoreAddressZero() public {
@@ -60,32 +61,37 @@ contract CertificationTest is Test {
         assertEq(diploma.totalCredits, credits);
         assertEq(diploma.finalAverage, avg);
         assertEq(diploma.issueTimestamp, block.timestamp);
-        assertEq(diploma.degreeTitle, "Bachelor of IT");
-        assertEq(diploma.major, "Information Technology");
-        assertEq(diploma.issuer, core);
+        assertEq(diploma.issuer, issuer);
         assertFalse(diploma.revoked);
     }
 
     function test_IssueDiplomaWithHashOnlyAnchor() public {
         vm.prank(core);
-        certification.issueDiploma(student, "B.Sc.", "CS", 180, 800, DOC_HASH, "");
+        certification.issueDiploma(student, 180, 800, DOC_HASH, META_URI, issuer);
 
         ICertification.Diploma memory diploma = certification.getDiploma(1);
         assertEq(diploma.documentHash, DOC_HASH);
-        assertEq(bytes(diploma.metadataURI).length, 0);
+        assertEq(diploma.metadataURI, META_URI);
     }
 
     function test_IssueDiplomaWithUriOnlyAnchor() public {
         vm.prank(core);
-        certification.issueDiploma(student, "B.Sc.", "CS", 180, 800, bytes32(0), META_URI);
+        certification.issueDiploma(student, 180, 800, bytes32(0), META_URI, issuer);
 
         assertEq(certification.tokenURI(1), META_URI);
+        assertEq(certification.getDiploma(1).documentHash, bytes32(0));
     }
 
     function test_RevertIfInvalidCredentialAnchor() public {
         vm.prank(core);
         vm.expectRevert(Certification.Certification__InvalidCredentialAnchor.selector);
-        certification.issueDiploma(student, "B.Sc.", "CS", 180, 800, bytes32(0), "");
+        certification.issueDiploma(student, 180, 800, DOC_HASH, "", issuer);
+    }
+
+    function test_RevertIfIssuerAddressZero() public {
+        vm.prank(core);
+        vm.expectRevert(Certification.Certification__AddressZero.selector);
+        certification.issueDiploma(student, 180, 800, DOC_HASH, META_URI, address(0));
     }
 
     function test_RevertIfStudentAlreadyHasDiploma() public {
@@ -95,7 +101,7 @@ contract CertificationTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(Certification.Certification__StudentAlreadyHasDiploma.selector, student)
         );
-        certification.issueDiploma(student, "B.Sc.", "CS", 180, 800, DOC_HASH, META_URI);
+        certification.issueDiploma(student, 180, 800, DOC_HASH, META_URI, issuer);
     }
 
     function test_RevertIfAverageTooLow() public {
@@ -103,7 +109,7 @@ contract CertificationTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(Certification.Certification__AverageTooLow.selector, student, uint256(499))
         );
-        certification.issueDiploma(student, "Bachelor of IT", "Information Technology", 180, 499, DOC_HASH, META_URI);
+        certification.issueDiploma(student, 180, 499, DOC_HASH, META_URI, issuer);
     }
 
     function test_RevertIfNotEnoughCredits() public {
@@ -111,13 +117,13 @@ contract CertificationTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(Certification.Certification__NotEnoughCredits.selector, student, uint256(175))
         );
-        certification.issueDiploma(student, "Bachelor of IT", "Information Technology", 175, 800, DOC_HASH, META_URI);
+        certification.issueDiploma(student, 175, 800, DOC_HASH, META_URI, issuer);
     }
 
     function test_RevertIfNotCoreAttemptsIssue() public {
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(Certification.Certification__NotCore.selector, alice));
-        certification.issueDiploma(student, "Bachelor of IT", "Information Technology", 180, 800, DOC_HASH, META_URI);
+        certification.issueDiploma(student, 180, 800, DOC_HASH, META_URI, issuer);
     }
 
     function test_HasValidDiplomaAfterRevoke() public {
@@ -190,11 +196,8 @@ contract CertificationTest is Test {
         uint256 credits = bound(rawCredits, CREDITS_REQUIRED, 500);
         uint256 avg = bound(rawAvg, 500, 1000);
 
-        string memory degreeTitle = "Fuzzed Bachelor Degree";
-        string memory major = "Fuzzed Major";
-
         vm.prank(core);
-        certification.issueDiploma(student, degreeTitle, major, credits, avg, DOC_HASH, META_URI);
+        certification.issueDiploma(student, credits, avg, DOC_HASH, META_URI, issuer);
 
         uint256 tokenId = certification.getDiplomaIdForStudent(student);
         assertTrue(certification.isDiplomaValid(tokenId));
@@ -203,6 +206,7 @@ contract CertificationTest is Test {
         assertEq(diploma.totalCredits, credits);
         assertEq(diploma.finalAverage, avg);
         assertEq(diploma.documentHash, DOC_HASH);
+        assertEq(diploma.issuer, issuer);
 
         vm.prank(student);
         vm.expectRevert(SoulboundNFT.SoulBoundNFT__NotAuthorized.selector);

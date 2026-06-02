@@ -123,7 +123,6 @@ contract UniversityCore is IUniversityCore, AccessControl {
             revert UniversityCore__AlreadyInitialized();
         }
 
-        _requireSoulboundNftModule(studentRegistry);
         _requireSoulboundNftModule(certification);
 
         s_studentRegistry = IStudentRegistry(studentRegistry);
@@ -262,8 +261,6 @@ contract UniversityCore is IUniversityCore, AccessControl {
     /// @inheritdoc IUniversityCore
     function graduateStudentAndIssueDiploma(
         address student,
-        string calldata degreeTitle,
-        string calldata major,
         bytes32 documentHash,
         string calldata metadataURI
     ) external onlyRole(DIPLOMA_ISSUER_ROLE) coreInitialized {
@@ -272,7 +269,9 @@ contract UniversityCore is IUniversityCore, AccessControl {
         uint256 credits = s_gradebook.getStudentCredits(student);
         uint256 weightedAverage = s_gradebook.getWeightedAverage(student);
 
-        s_certification.issueDiploma(student, degreeTitle, major, credits, weightedAverage, documentHash, metadataURI);
+        s_certification.issueDiploma(
+            student, credits, weightedAverage, documentHash, metadataURI, msg.sender
+        );
         uint256 diplomaTokenId = s_certification.getDiplomaIdForStudent(student);
         s_studentRegistry.graduateStudent(student);
 
@@ -342,7 +341,7 @@ contract UniversityCore is IUniversityCore, AccessControl {
     /////// Private Functions ///////
     /////////////////////////////////
 
-    /// @dev Registry and Certification must implement ERC-721 and EIP-5192 (soulbound signaling).
+    /// @dev Certification must implement ERC-721 and EIP-5192 (soulbound signaling).
     function _requireSoulboundNftModule(address module) private view {
         if (!IERC165(module).supportsInterface(type(IERC721).interfaceId)) {
             revert UniversityCore__ContractDoesNotSupportIERC721(module);

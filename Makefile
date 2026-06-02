@@ -29,7 +29,8 @@ export ANVIL_PORT ANVIL_CHAIN_ID
 .DEFAULT_GOAL := help
 
 .PHONY: help anvil anvil-stop anvil-logs anvil-status check-anvil build test deploy deploy-anvil \
-        sync-frontend setup-dev local frontend-dev indexer-install indexer-dev indexer-sync dev \
+        sync-frontend setup-dev local frontend-install frontend-dev frontend-build frontend-start frontend-prod \
+        indexer-install indexer-dev indexer-sync dev prod \
         redeploy clean-anvil-state clean-indexer-data
 
 help:
@@ -47,9 +48,13 @@ help:
 	@echo "  make redeploy         anvil-stop, fresh anvil, deploy, sync-frontend"
 	@echo "  make test             forge test"
 	@echo "  make build            forge build"
-	@echo "  make frontend-dev     Next.js dev server"
+	@echo "  make frontend-dev     Next.js dev server (hot reload, port 3000)"
+	@echo "  make frontend-build   Build Next.js for production"
+	@echo "  make frontend-start   Serve production build (run frontend-build first)"
+	@echo "  make frontend-prod    frontend-build + frontend-start"
 	@echo "  make indexer-dev      Enrollment indexer API (port $(INDEXER_PORT))"
-	@echo "  make dev              indexer + frontend in parallel (Anvil must be running)"
+	@echo "  make dev              indexer + frontend dev in parallel"
+	@echo "  make prod             indexer + frontend production server in parallel"
 	@echo ""
 	@echo "Env: ANVIL_RPC=$(ANVIL_RPC)  ANVIL_CHAIN_ID=$(ANVIL_CHAIN_ID)"
 
@@ -106,9 +111,11 @@ clean-indexer-data:
 
 local: anvil-stop clean-indexer-data anvil setup-dev indexer-install
 	@echo "Local stack ready."
-	@echo "  make dev            — indexer + frontend"
+	@echo "  make dev            — indexer + frontend (dev)"
+	@echo "  make prod           — indexer + frontend (production build)"
 	@echo "  make indexer-dev    — indexer only"
-	@echo "  make frontend-dev   — frontend only"
+	@echo "  make frontend-dev   — frontend dev only"
+	@echo "  make frontend-prod  — frontend production only"
 
 indexer-install:
 	@if [ ! -d "$(INDEXER_DIR)/node_modules" ]; then \
@@ -122,12 +129,36 @@ indexer-dev: indexer-install
 indexer-sync: indexer-install
 	@cd "$(INDEXER_DIR)" && npm run sync
 
-frontend-dev:
+frontend-install:
+	@if [ ! -d "$(FRONTEND_DIR)/node_modules" ]; then \
+		echo "Installing frontend dependencies..."; \
+		cd "$(FRONTEND_DIR)" && npm install; \
+	fi
+
+frontend-dev: frontend-install
 	@cd "$(FRONTEND_DIR)" && npm run dev
 
+frontend-build: frontend-install
+	@echo "Building frontend for production..."
+	@cd "$(FRONTEND_DIR)" && npm run build
+
+frontend-start: frontend-install
+	@if [ ! -d "$(FRONTEND_DIR)/.next" ]; then \
+		echo "No production build found. Run: make frontend-build"; \
+		exit 1; \
+	fi
+	@cd "$(FRONTEND_DIR)" && npm run start
+
+frontend-prod: frontend-build
+	@$(MAKE) frontend-start
+
 dev: indexer-install
-	@echo "Starting indexer (port $(INDEXER_PORT)) + frontend (port 3000)…"
+	@echo "Starting indexer (port $(INDEXER_PORT)) + frontend dev (port 3000)…"
 	@$(MAKE) -j2 indexer-dev frontend-dev
+
+prod: indexer-install frontend-build
+	@echo "Starting indexer (port $(INDEXER_PORT)) + frontend production (port 3000)…"
+	@$(MAKE) -j2 indexer-dev frontend-start
 
 clean-anvil-state:
 	@rm -rf "$(BLOCKCHAIN_DIR)/broadcast" "$(BLOCKCHAIN_DIR)/cache" "$(ANVIL_LOG_FILE)"

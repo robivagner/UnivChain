@@ -1,9 +1,32 @@
 "use client";
+
+import { Fraunces, JetBrains_Mono, Outfit } from "next/font/google";
+import "@rainbow-me/rainbowkit/styles.css";
+import { RainbowKitProvider } from "@rainbow-me/rainbowkit";
 import { WagmiProvider } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ConnectKitProvider } from "connectkit";
 import { config } from "@/config/wagmi";
+import { portalTheme } from "@/config/rainbowTheme";
+import { WalletConnectErrorGuard } from "@/components/shared/WalletConnectErrorGuard";
 import "./globals.css";
+
+const outfit = Outfit({
+  subsets: ["latin"],
+  variable: "--font-outfit",
+  display: "swap",
+});
+
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-fraunces",
+  display: "swap",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains",
+  display: "swap",
+});
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -16,11 +39,16 @@ const queryClient = new QueryClient({
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body>
+    <html
+      lang="en"
+      className={`${outfit.variable} ${fraunces.variable} ${jetbrainsMono.variable}`}
+    >
+      <body className="antialiased">
         <WagmiProvider config={config}>
           <QueryClientProvider client={queryClient}>
-            <ConnectKitProvider>{children}</ConnectKitProvider>
+            <RainbowKitProvider initialChain={config.chains[0]} theme={portalTheme}>
+              <WalletConnectErrorGuard>{children}</WalletConnectErrorGuard>
+            </RainbowKitProvider>
           </QueryClientProvider>
         </WagmiProvider>
       </body>

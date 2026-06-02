@@ -3,119 +3,208 @@
 import Link from "next/link";
 import { useAccount } from "wagmi";
 import { useIsAdmin } from "@/lib/useIsAdmin";
+import { useIsProfessor } from "@/lib/useIsProfessor";
+import { useIsIssuer } from "@/lib/useIsIssuer";
+import { useMounted } from "@/lib/useMounted";
+import { badgeGoldClass } from "@/lib/ui/portalClasses";
+
+const ROLE_CARDS = [
+  {
+    title: "For students",
+    description:
+      "Enroll, track credits and grades, and access your diploma record after graduation. Your identity is a non-transferable soulbound token while you study.",
+    accent: "from-uc-violet/20 to-transparent",
+    icon: "🎓",
+  },
+  {
+    title: "For professors",
+    description:
+      "After an admin grants PROFESSOR_ROLE, create subjects, post grades, and manage course activity.",
+    accent: "from-indigo-500/20 to-transparent",
+    icon: "📚",
+  },
+  {
+    title: "For diploma issuers",
+    description:
+      "Review graduation eligibility and mint the final diploma soulbound token when academic requirements are met.",
+    accent: "from-teal-400/20 to-transparent",
+    icon: "📜",
+  },
+  {
+    title: "For administrators",
+    description: "Review enrollment requests, grant roles, and assign subjects to faculty wallets.",
+    accent: "from-uc-cyan/20 to-transparent",
+    icon: "⚙️",
+  },
+] as const;
 
 function NavCard({
   href,
   title,
   description,
-  accent,
+  accentClass,
   disabled,
   badge,
 }: {
   href: string;
   title: string;
   description: string;
-  accent: string;
+  accentClass: string;
   disabled?: boolean;
   badge?: string;
 }) {
   if (disabled) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 opacity-70">
+      <div className={`portal-nav-card portal-nav-card-disabled ${accentClass}`}>
         <div className="flex items-center justify-between gap-2 mb-2">
-          <h3 className="font-semibold text-slate-700">{title}</h3>
-          {badge && (
-            <span className="text-[10px] uppercase tracking-wide text-slate-500">{badge}</span>
-          )}
+          <h3 className="font-semibold text-uc-text/80">{title}</h3>
+          {badge && <span className={badgeGoldClass}>{badge}</span>}
         </div>
-        <p className="text-sm text-slate-500">{description}</p>
+        <p className="text-sm text-uc-muted">{description}</p>
       </div>
     );
   }
 
   return (
-    <Link
-      href={href}
-      className={`rounded-xl border p-5 transition shadow-sm hover:shadow-md ${accent}`}
-    >
-      <h3 className="font-semibold text-slate-900 mb-2">{title}</h3>
-      <p className="text-sm text-slate-600">{description}</p>
+    <Link href={href} className={`portal-nav-card block ${accentClass}`}>
+      <h3 className="font-semibold text-uc-text mb-2">{title}</h3>
+      <p className="text-sm text-uc-muted leading-relaxed">{description}</p>
     </Link>
   );
 }
 
 export function LandingContent() {
+  const mounted = useMounted();
   const { isConnected } = useAccount();
+  const walletReady = mounted && isConnected;
   const { isAdmin, isLoading: isAdminLoading } = useIsAdmin();
+  const { isProfessor, isLoading: isProfessorLoading } = useIsProfessor();
+  const { isIssuer, isLoading: isIssuerLoading } = useIsIssuer();
+
+  const rolesLoading = isAdminLoading || isProfessorLoading || isIssuerLoading;
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-12 flex flex-col gap-10">
-      <section className="text-center flex flex-col gap-4">
-        <h1 className="text-4xl font-bold text-slate-900 tracking-tight">
-          UnivChain Academic Portal
-        </h1>
-        <p className="text-slate-600 text-lg leading-relaxed max-w-2xl mx-auto">
-          A hub-and-spoke university management system on Ethereum. Students request enrollment
-          with an on-chain fee payment; administrators issue soulbound identity tokens. Grades and
-          diplomas are recorded transparently and can be verified without trusting a central
-          database.
-        </p>
+    <div className="max-w-5xl mx-auto px-4 py-12 sm:py-16 flex flex-col gap-14 portal-fade-up">
+      <section className="relative text-center flex flex-col gap-6 items-center">
+        <div className="portal-float inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs text-uc-muted backdrop-blur-sm">
+          <span className="h-1.5 w-1.5 rounded-full bg-uc-gold shadow-[0_0_10px_rgba(232,184,109,0.8)]" />
+          Ethereum-powered academic credentials
+        </div>
+
+        <div className="flex flex-col gap-4 max-w-3xl">
+          <p className="portal-kicker">UnivChain Academic Portal</p>
+          <h1 className="portal-page-title text-4xl sm:text-5xl">
+            Your degree,{" "}
+            <span className="bg-gradient-to-r from-uc-gold via-uc-violet to-uc-cyan bg-clip-text text-transparent">
+              verified on-chain
+            </span>
+          </h1>
+          <p className="text-uc-muted text-lg leading-relaxed">
+            A hub-and-spoke university management system on Ethereum. Students request enrollment
+            with an on-chain fee payment; administrators issue soulbound identity tokens. Grades and
+            diplomas are recorded transparently and can be verified without trusting a central
+            database.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3 sm:gap-6 w-full max-w-xl pt-2">
+          {[
+            { label: "Student records", value: "On-chain registry" },
+            { label: "Verification", value: "Public RPC" },
+            { label: "Records", value: "Immutable" },
+          ].map((stat) => (
+            <div key={stat.label} className="portal-stat-tile text-center">
+              <p className="portal-stat-label">{stat.label}</p>
+              <p className="text-sm font-semibold text-uc-text">{stat.value}</p>
+            </div>
+          ))}
+        </div>
       </section>
 
-      <section className="grid sm:grid-cols-2 gap-4 text-sm text-slate-700">
-        <div className="rounded-lg bg-white border border-slate-200 p-4">
-          <h2 className="font-semibold text-slate-900 mb-2">For students</h2>
-          <p>
-            Pay the registration fee in Mock USDC (local dev), then wait for an admin to accept your
-            wallet address with a matriculation number. Your identity is minted as a non-transferable
-            SBT.
-          </p>
-        </div>
-        <div className="rounded-lg bg-white border border-slate-200 p-4">
-          <h2 className="font-semibold text-slate-900 mb-2">For verifiers</h2>
-          <p>
-            Anyone can read diploma validity on-chain — no wallet required. Check by student address
-            or diploma token ID.
-          </p>
-        </div>
-        <div className="rounded-lg bg-white border border-slate-200 p-4 sm:col-span-2">
-          <h2 className="font-semibold text-slate-900 mb-2">For administrators</h2>
-          <p>
-            Pending enrollment requests are indexed off-chain (event scan + SQLite) and reconciled
-            with contract state. Connect the deployer wallet to review and accept requests.
-          </p>
-        </div>
+      <section className="grid sm:grid-cols-2 gap-4">
+        {ROLE_CARDS.map((card) => (
+          <article
+            key={card.title}
+            className={`portal-card p-5 bg-gradient-to-br ${card.accent}`}
+          >
+            <div className="flex items-start gap-3">
+              <span className="text-xl" aria-hidden>
+                {card.icon}
+              </span>
+              <div>
+                <h2 className="font-semibold text-uc-text mb-2">{card.title}</h2>
+                <p className="text-sm text-uc-muted leading-relaxed">{card.description}</p>
+              </div>
+            </div>
+          </article>
+        ))}
       </section>
 
-      <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 text-center">
-          Navigate
-        </h2>
+      <section className="flex flex-col gap-4">
+        <div className="text-center">
+          <p className="portal-section-title">Navigate the portal</p>
+          <h2 className="portal-display text-2xl font-semibold text-uc-text mt-1">
+            Choose your workspace
+          </h2>
+        </div>
+
         <div className="grid sm:grid-cols-2 gap-4">
           <NavCard
             href="/verify"
             title="Verify diploma"
             description="Public read-only check of on-chain diploma records."
-            accent="border-emerald-200 bg-emerald-50/50 hover:border-emerald-300"
+            accentClass="portal-nav-card-emerald"
           />
           <NavCard
             href="/enroll"
-            title="Request enrollment"
-            description="Student flow: mint test USDC, approve, and call requestEnrollment."
-            accent="border-violet-200 bg-violet-50/50 hover:border-violet-300"
-            disabled={!isConnected || isAdminLoading || isAdmin}
-            badge={!isConnected ? "Connect wallet" : isAdmin ? "Admin account" : undefined}
+            title="Student portal"
+            description="Enrollment, transcript, credits, and diploma access for your wallet."
+            accentClass="portal-nav-card-violet"
+            disabled={!walletReady}
+            badge={!walletReady ? "Connect wallet" : undefined}
           />
           <NavCard
-            href="/admin/enrollments"
-            title="Admin — enrollment queue"
-            description="List pending requests from chain events and accept with a matriculation number."
-            accent="border-blue-200 bg-blue-50/50 hover:border-blue-300"
-            disabled={!isConnected || isAdminLoading || !isAdmin}
+            href="/professor"
+            title="For professors"
+            description="Add subjects, post grades, and manage your courses on-chain."
+            accentClass="portal-nav-card-indigo"
+            disabled={!walletReady || rolesLoading || !isProfessor}
             badge={
-              !isConnected
+              !walletReady
                 ? "Connect wallet"
-                : isAdminLoading
+                : rolesLoading
+                  ? "Checking role…"
+                  : !isProfessor
+                    ? "Professor only"
+                    : undefined
+            }
+          />
+          <NavCard
+            href="/issuer"
+            title="For diploma issuers"
+            description="Check eligibility and graduate students with an on-chain diploma."
+            accentClass="portal-nav-card-teal"
+            disabled={!walletReady || rolesLoading || !isIssuer}
+            badge={
+              !walletReady
+                ? "Connect wallet"
+                : rolesLoading
+                  ? "Checking role…"
+                  : !isIssuer
+                    ? "Issuer only"
+                    : undefined
+            }
+          />
+          <NavCard
+            href="/admin"
+            title="Admin dashboard"
+            description="Enrollments, grant roles, and assign subjects to professors."
+            accentClass="portal-nav-card-blue"
+            disabled={!walletReady || rolesLoading || !isAdmin}
+            badge={
+              !walletReady
+                ? "Connect wallet"
+                : rolesLoading
                   ? "Checking role…"
                   : !isAdmin
                     ? "Admin only"
@@ -123,9 +212,10 @@ export function LandingContent() {
             }
           />
         </div>
-        {!isConnected && (
-          <p className="text-center text-sm text-slate-500">
-            Connect your wallet in the header to unlock student or admin actions.
+
+        {mounted && !isConnected && (
+          <p className="text-center text-sm text-uc-muted">
+            Connect your wallet in the header to unlock role-specific portals.
           </p>
         )}
       </section>
