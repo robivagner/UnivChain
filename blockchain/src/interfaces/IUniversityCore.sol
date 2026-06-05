@@ -32,11 +32,19 @@ interface IUniversityCore {
     /// @param issuer The wallet address authorized to issue diplomas.
     function addDiplomaIssuer(address issuer) external;
 
-    /// @notice Sets or updates the registration fee for a specific ERC20 token.
-    /// @dev Can only be called by an Admin. Forwards the configuration to the FeeManager contract.
-    /// @param token The address of the ERC20 token (e.g., USDC).
-    /// @param feeAmount The exact amount required (including decimals).
-    function setTokenFee(address token, uint256 feeAmount) external;
+    /// @notice Configures registration fee, retake fee-per-credit, and semester tax for a specific ERC20 token.
+    function configureToken(
+        address token,
+        uint256 registrationFee,
+        uint256 retakeFeePerCredit,
+        uint256 semesterTax
+    ) external;
+
+    /// @notice Accrues retake tax for a student repeating a subject.
+    function accrueRetakeTax(address student, address token, uint256 subjectId) external;
+
+    /// @notice Accrues one semester tax for an enrolled student.
+    function accrueSemesterTax(address student, address token) external;
 
     /// @notice Withdraws accumulated registration fees from the FeeManager to a specified wallet.
     /// @dev Can only be called by an Admin. Checks for zero address on destination.
@@ -105,6 +113,9 @@ interface IUniversityCore {
     /// @dev Pulls tokens from student to Core, grants allowance to FeeManager, and registers the payment voucher.
     /// @param token The contract address of the ERC20 token used for payment.
     function requestEnrollment(address token) external;
+
+    /// @notice Public permissionless entry point for students to pay outstanding university debt.
+    function payStudentDebt(address token, uint256 amount) external;
 
     /// @notice Retrieves the current address of the linked Student Registry contract.
     /// @return The contract address.

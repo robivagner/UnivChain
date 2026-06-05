@@ -18,7 +18,7 @@ The protocol is decoupled into five distinct, highly secure smart contracts to m
 
 Spoke contracts are wired to the hub exactly once via `initializeCore` and cannot be replaced afterward; the protocol is not upgradeable in place.
 
-**Diploma credentials:** Each graduation mints a soulbound ERC-721 with on-chain snapshots (ECTS, GPA, issuer wallet) and a required `metadataURI` pointing to **EIP-712 signed JSON** (`univchain-diploma-1` format under `credentials/`). See `credentials/README.md`. Optional `studentIdHash` links the credential to the hashed matriculation number from `StudentRegistry`.
+**Diploma credentials:** Each graduation mints a soulbound ERC-721 with on-chain snapshots (ECTS, GPA, issuer wallet) and a required `metadataURI` pointing to **EIP-712 signed JSON** (`univchain-diploma-1` format in `frontend/src/lib/diploma/`). See [`frontend/src/lib/diploma/README.md`](../frontend/src/lib/diploma/README.md). Optional `studentIdHash` links the credential to the hashed matriculation number from `StudentRegistry`.
 
 **Access-control split (hybrid hub-and-spoke):**
 

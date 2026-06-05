@@ -51,7 +51,6 @@ cmd_stop() {
   pid="$(cat "$PID_FILE")"
   if kill -0 "$pid" 2>/dev/null; then
     kill "$pid" 2>/dev/null || true
-    # Wait briefly for a clean shutdown.
     for _ in 1 2 3 4 5; do
       kill -0 "$pid" 2>/dev/null || break
       sleep 0.2

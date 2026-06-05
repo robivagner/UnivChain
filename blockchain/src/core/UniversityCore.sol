@@ -39,6 +39,8 @@ contract UniversityCore is IUniversityCore, AccessControl {
     error UniversityCore__FeeNotPaid(address student);
     error UniversityCore__StudentAlreadyRequestedEnroll(address student);
     error UniversityCore__TokenIsNotAllowed(address token);
+    error UniversityCore__OutstandingStudentDebt(address student);
+    error UniversityCore__InvalidDebtPayment(uint256 requested, uint256 owed);
 
     // State variables
     bytes32 public constant PROFESSOR_ROLE = keccak256("PROFESSOR_ROLE");
@@ -148,8 +150,34 @@ contract UniversityCore is IUniversityCore, AccessControl {
     }
 
     /// @inheritdoc IUniversityCore
-    function setTokenFee(address token, uint256 feeAmount) external onlyRole(ADMIN_ROLE) coreInitialized {
-        s_feeManager.setTokenFee(token, feeAmount);
+    function configureToken(
+        address token,
+        uint256 registrationFee,
+        uint256 retakeFeePerCredit,
+        uint256 semesterTax
+    ) external onlyRole(ADMIN_ROLE) coreInitialized {
+        s_feeManager.configureToken(token, registrationFee, retakeFeePerCredit, semesterTax);
+    }
+
+    /// @inheritdoc IUniversityCore
+    function accrueRetakeTax(address student, address token, uint256 subjectId)
+        external
+        onlyRole(ADMIN_ROLE)
+        coreInitialized
+    {
+        _requireActiveEnrolledStudent(student);
+        (, uint8 credits,,) = s_gradebook.getSubjectMetadata(subjectId);
+        s_feeManager.accrueRetakeTax(student, token, credits);
+    }
+
+    /// @inheritdoc IUniversityCore
+    function accrueSemesterTax(address student, address token)
+        external
+        onlyRole(ADMIN_ROLE)
+        coreInitialized
+    {
+        _requireActiveEnrolledStudent(student);
+        s_feeManager.accrueSemesterTax(student, token);
     }
 
     /// @inheritdoc IUniversityCore
@@ -299,7 +327,7 @@ contract UniversityCore is IUniversityCore, AccessControl {
             revert UniversityCore__StudentAlreadyRequestedEnroll(msg.sender);
         }
 
-        uint256 feeAmount = feeManager.getFeeAmountForToken(token);
+        uint256 feeAmount = feeManager.getRegistrationFeeForToken(token);
 
         if (feeAmount == 0) {
             revert UniversityCore__TokenIsNotAllowed(token);
@@ -311,6 +339,21 @@ contract UniversityCore is IUniversityCore, AccessControl {
         feeManager.payRegistrationFee(token, msg.sender);
 
         emit StudentEnrollmentRequested(msg.sender);
+    }
+
+    /// @inheritdoc IUniversityCore
+    function payStudentDebt(address token, uint256 amount) external coreInitialized {
+        _requireActiveEnrolledStudent(msg.sender);
+
+        IFeeManager feeManager = s_feeManager;
+        uint256 owed = feeManager.getStudentDebtOwed(msg.sender, token);
+        if (amount == 0 || amount > owed) {
+            revert UniversityCore__InvalidDebtPayment(amount, owed);
+        }
+
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
+        IERC20(token).safeIncreaseAllowance(address(feeManager), amount);
+        feeManager.payStudentDebt(token, msg.sender, amount);
     }
 
     //////////////////////////////
@@ -363,6 +406,18 @@ contract UniversityCore is IUniversityCore, AccessControl {
         }
         if (s_certification.hasDiploma(student)) {
             revert UniversityCore__StudentAlreadyHasDiploma(student);
+        }
+        if (s_feeManager.hasOutstandingDebt(student)) {
+            revert UniversityCore__OutstandingStudentDebt(student);
+        }
+    }
+
+    function _requireActiveEnrolledStudent(address student) private view {
+        if (s_studentRegistry.isStudentExpelled(student)) {
+            revert UniversityCore__StudentIsExpelled(student);
+        }
+        if (!s_studentRegistry.isStudentEnrolled(student)) {
+            revert UniversityCore__StudentIsNotEnrolled(student);
         }
     }
 }

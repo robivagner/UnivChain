@@ -15,7 +15,7 @@ import {
 } from "@/lib/enrollment/enrollmentFlow";
 import { formatTxError } from "@/lib/wallet/formatTxError";
 import { waitForSuccessfulTx } from "@/lib/wallet/runContractTx";
-import { TxErrorAlert } from "@/components/shared/TxErrorAlert";
+import { useNotifications } from "@/lib/notifications/NotificationProvider";
 import {
   alertWarningClass,
   btnSuccessClass,
@@ -47,9 +47,9 @@ export function StudentEnrollmentPanel({ embedded = false }: { embedded?: boolea
 
   const [stepMessage, setStepMessage] = useState<string | null>(null);
   const [flowPhase, setFlowPhase] = useState<EnrollmentFlowPhase>("idle");
-  const [localError, setLocalError] = useState<string | null>(null);
   const [isMinting, setIsMinting] = useState(false);
 
+  const { notifyError, notifySuccess } = useNotifications();
   const isProcessing = flowPhase !== "idle" || isMinting;
 
   const checksEnabled = Boolean(deployment && address && enrollmentToken);
@@ -78,7 +78,7 @@ export function StudentEnrollmentPanel({ embedded = false }: { embedded?: boolea
   const { data: feeAmount } = useReadContract({
     address: deployment?.feeManager,
     abi: FeeManagerABI,
-    functionName: "getFeeAmountForToken",
+    functionName: "getRegistrationFeeForToken",
     args: enrollmentToken ? [enrollmentToken] : undefined,
     query: readQuery,
   });
@@ -137,7 +137,6 @@ export function StudentEnrollmentPanel({ embedded = false }: { embedded?: boolea
   const handleMintTestUsdc = async () => {
     if (!deployment?.enrollmentToken || !address || !publicClient) return;
     reset();
-    setLocalError(null);
     setIsMinting(true);
     setStepMessage("Minting test tokens...");
     try {
@@ -149,10 +148,11 @@ export function StudentEnrollmentPanel({ embedded = false }: { embedded?: boolea
         args: [address, amount],
       });
       await waitAndRefresh(hash);
-      setStepMessage("Mock USDC received in your wallet.");
+      setStepMessage(null);
+      notifySuccess("Mock USDC received in your wallet.");
     } catch (e) {
       setStepMessage(null);
-      setLocalError(formatTxError(e));
+      notifyError(formatTxError(e), "Transaction failed");
     } finally {
       setIsMinting(false);
     }
@@ -161,32 +161,31 @@ export function StudentEnrollmentPanel({ embedded = false }: { embedded?: boolea
   const handleRequestEnrollment = async () => {
     if (isProcessing || isPending) return;
     if (!isConnected || !deployment?.enrollmentToken || !address || !publicClient) {
-      alert("Connect your wallet on Anvil (31337) and run: make setup-dev");
+      notifyError("Connect your wallet on Anvil (31337) and run: make setup-dev");
       return;
     }
 
     if (fee === 0n) {
-      alert("Enrollment token is not configured. Run: make setup-dev");
+      notifyError("Enrollment token is not configured. Run: make setup-dev");
       return;
     }
 
     if (isEnrolled) {
-      alert("You are already enrolled.");
+      notifyError("You are already enrolled.");
       return;
     }
 
     if (hasPaidFee) {
-      alert("You already submitted a request. Wait for admin acceptance.");
+      notifyError("You already submitted a request. Wait for admin acceptance.");
       return;
     }
 
     if (balance < effectiveFee) {
-      alert("Insufficient balance. Click “Get Mock USDC (test)” first.");
+      notifyError('Insufficient balance. Click "Get Mock USDC (test)" first.');
       return;
     }
 
     reset();
-    setLocalError(null);
     setStepMessage(null);
 
     try {
@@ -220,10 +219,11 @@ export function StudentEnrollmentPanel({ embedded = false }: { embedded?: boolea
       setFlowPhase("enroll-confirm");
       await waitForSuccessfulTx(publicClient, enrollHash);
       await invalidate();
-      setStepMessage("Request submitted. An admin can accept your enrollment.");
+      setStepMessage(null);
+      notifySuccess("Request submitted. An admin can accept your enrollment.");
     } catch (e) {
       setStepMessage(null);
-      setLocalError(formatTxError(e));
+      notifyError(formatTxError(e), "Transaction failed");
     } finally {
       setFlowPhase("idle");
     }
@@ -299,8 +299,6 @@ export function StudentEnrollmentPanel({ embedded = false }: { embedded?: boolea
         </button>
 
         {flowStepMessage && <p className={messageBoxClass}>{flowStepMessage}</p>}
-
-        {localError && <TxErrorAlert message={localError} />}
       </div>
     </div>
   );

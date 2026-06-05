@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
-import { useAccount, useReadContract, useReadContracts } from "wagmi";
+import { useQuery } from "@tanstack/react-query";
 import { getAddress } from "viem";
-import { GradebookABI } from "@/abi/Gradebook";
+import { useAccount, useChainId } from "wagmi";
 import { getDeployment } from "@/lib/contracts";
+import { triggerIndexerSync } from "@/lib/indexer/triggerIndexerSync";
 
 export type ProfessorSubject = {
   subjectId: bigint;
@@ -14,60 +14,68 @@ export type ProfessorSubject = {
   isActive: boolean;
 };
 
-export function useProfessorSubjects() {
+type ApiResponse = {
+  subjects: Array<{
+    subjectId: number;
+    name: string;
+    credits: number;
+    professor: string;
+    isActive: boolean;
+  }>;
+};
+
+async function fetchProfessorSubjects(professor: `0x${string}`): Promise<ProfessorSubject[]> {
+  const res = await fetch(
+    `/api/professor/subjects?professor=${encodeURIComponent(professor)}`,
+    { cache: "no-store" }
+  );
+  const body = (await res.json()) as ApiResponse & { error?: string; hint?: string };
+
+  if (!res.ok) {
+    const parts = [body.error, body.hint].filter(Boolean).join(" — ");
+    throw new Error(parts || `Request failed (${res.status})`);
+  }
+
+  return body.subjects.map((row) => ({
+    subjectId: BigInt(row.subjectId),
+    name: row.name,
+    credits: row.credits,
+    professor: getAddress(row.professor),
+    isActive: row.isActive,
+  }));
+}
+
+export function useProfessorSubjects(enabled = true) {
   const { address, chainId } = useAccount();
   const deployment = chainId !== undefined ? getDeployment(chainId) : undefined;
-  const gradebook = deployment?.gradebook;
+  const professor = address ? getAddress(address) : undefined;
 
-  const { data: counter, isLoading: counterLoading } = useReadContract({
-    address: gradebook,
-    abi: GradebookABI,
-    functionName: "s_tokenIdCounter",
-    query: { enabled: Boolean(gradebook) },
+  const queryKey = ["professor-subjects", chainId, deployment?.gradebook, professor] as const;
+
+  const { data: subjects = [], isLoading, error, refetch } = useQuery({
+    queryKey,
+    enabled: Boolean(enabled && professor && deployment?.gradebook),
+    staleTime: 2_000,
+    refetchInterval: 15_000,
+    queryFn: () => fetchProfessorSubjects(professor!),
   });
 
-  const subjectIds = useMemo(() => {
-    if (counter === undefined || counter <= 1n) return [];
-    const ids: bigint[] = [];
-    for (let id = 1n; id < counter; id++) ids.push(id);
-    return ids;
-  }, [counter]);
-
-  const { data: metadataResults, isLoading: metadataLoading } = useReadContracts({
-    contracts: subjectIds.map((subjectId) => ({
-      address: gradebook!,
-      abi: GradebookABI,
-      functionName: "getSubjectMetadata" as const,
-      args: [subjectId] as const,
-    })),
-    query: { enabled: Boolean(gradebook && subjectIds.length > 0) },
-  });
-
-  const subjects = useMemo((): ProfessorSubject[] => {
-    if (!address || !metadataResults) return [];
-    const normalized = getAddress(address).toLowerCase();
-    const list: ProfessorSubject[] = [];
-
-    metadataResults.forEach((result, index) => {
-      if (result.status !== "success" || !result.result) return;
-      const [name, credits, professor, isActive] = result.result;
-      if (getAddress(professor).toLowerCase() !== normalized) return;
-      list.push({
-        subjectId: subjectIds[index],
-        name,
-        credits: Number(credits),
-        professor: getAddress(professor),
-        isActive,
-      });
-    });
-
-    return list.sort((a, b) => Number(a.subjectId - b.subjectId));
-  }, [address, metadataResults, subjectIds]);
+  const refreshFromIndexer = async () => {
+    try {
+      await triggerIndexerSync();
+    } catch {
+      // ignore — periodic refetch will catch up
+    }
+    await refetch();
+  };
 
   return {
     subjects,
-    isLoading: counterLoading || (subjectIds.length > 0 && metadataLoading),
+    isLoading,
+    error: error instanceof Error ? error.message : undefined,
+    refetch,
+    refreshFromIndexer,
     deployment,
-    gradebook,
+    gradebook: deployment?.gradebook,
   };
 }

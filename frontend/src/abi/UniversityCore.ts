@@ -87,6 +87,47 @@ export const UniversityCoreABI = [
   },
   {
     "type": "function",
+    "name": "accrueRetakeTax",
+    "inputs": [
+      {
+        "name": "student",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "subjectId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "accrueSemesterTax",
+    "inputs": [
+      {
+        "name": "student",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "addDiplomaIssuer",
     "inputs": [
       {
@@ -147,6 +188,34 @@ export const UniversityCoreABI = [
         "name": "credits",
         "type": "uint8",
         "internalType": "uint8"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "configureToken",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "registrationFee",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "retakeFeePerCredit",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "semesterTax",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [],
@@ -331,6 +400,24 @@ export const UniversityCoreABI = [
   },
   {
     "type": "function",
+    "name": "payStudentDebt",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "postGrade",
     "inputs": [
       {
@@ -505,24 +592,6 @@ export const UniversityCoreABI = [
         "name": "isActive",
         "type": "bool",
         "internalType": "bool"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "setTokenFee",
-    "inputs": [
-      {
-        "name": "token",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "feeAmount",
-        "type": "uint256",
-        "internalType": "uint256"
       }
     ],
     "outputs": [],
@@ -853,8 +922,35 @@ export const UniversityCoreABI = [
   },
   {
     "type": "error",
+    "name": "UniversityCore__InvalidDebtPayment",
+    "inputs": [
+      {
+        "name": "requested",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "owed",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "UniversityCore__NotInitialized",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "UniversityCore__OutstandingStudentDebt",
+    "inputs": [
+      {
+        "name": "student",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
   },
   {
     "type": "error",

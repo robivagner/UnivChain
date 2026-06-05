@@ -9,11 +9,10 @@ import { useLiveContractReads } from "@/lib/useLiveContractReads";
 import { formInputClassName } from "@/lib/formInputClassName";
 import { formatTxError } from "@/lib/wallet/formatTxError";
 import { runContractTx } from "@/lib/wallet/runContractTx";
-import { TxErrorAlert } from "@/components/shared/TxErrorAlert";
+import { useNotifications } from "@/lib/notifications/NotificationProvider";
 import {
   btnVioletClass,
   formInputMonoClassName,
-  messageBoxClass,
   portalCardClass,
   portalSectionTitleClass,
 } from "@/lib/ui/portalClasses";
@@ -27,29 +26,26 @@ export function AdminAddSubjectPanel({ deployment }: Props) {
   const [name, setName] = useState("");
   const [credits, setCredits] = useState("6");
   const [professor, setProfessor] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
-  const [localError, setLocalError] = useState<string | null>(null);
+  const { notifyError, notifySuccess } = useNotifications();
   const { invalidate } = useLiveContractReads(true);
   const { writeContractAsync, isPending, reset } = useWriteContract();
 
   const handleSubmit = async () => {
     if (!name.trim()) {
-      alert("Enter a subject name.");
+      notifyError("Enter a subject name.");
       return;
     }
     if (!isAddress(professor)) {
-      alert("Enter a valid professor address (must already have PROFESSOR_ROLE).");
+      notifyError("Enter a valid professor address (must already have PROFESSOR_ROLE).");
       return;
     }
     const creditsNum = Number(credits);
     if (!Number.isInteger(creditsNum) || creditsNum < 1 || creditsNum > 30) {
-      alert("Credits must be an integer between 1 and 30.");
+      notifyError("Credits must be an integer between 1 and 30.");
       return;
     }
 
     reset();
-    setMessage(null);
-    setLocalError(null);
     try {
       await runContractTx({
         publicClient,
@@ -64,9 +60,9 @@ export function AdminAddSubjectPanel({ deployment }: Props) {
       });
       setName("");
       setProfessor("");
-      setMessage("Subject created and assigned to the professor.");
+      notifySuccess("Subject created and assigned to the professor.");
     } catch (e) {
-      setLocalError(formatTxError(e));
+      notifyError(formatTxError(e), "Transaction failed");
     }
   };
 
@@ -102,8 +98,6 @@ export function AdminAddSubjectPanel({ deployment }: Props) {
       <button type="button" onClick={handleSubmit} disabled={isPending} className={btnVioletClass}>
         {isPending ? "Processing…" : "Add subject for professor"}
       </button>
-      {message && <p className={messageBoxClass}>{message}</p>}
-      {localError && <TxErrorAlert message={localError} />}
     </section>
   );
 }

@@ -22,7 +22,6 @@ const FRIENDLY_REVERTS: Record<string, string> = {
   Gradebook__NotProfessorOfSubject: "You are not the professor assigned to this subject.",
   Gradebook__SubjectIdOutOfBounds: "That subject ID does not exist.",
   Gradebook__SubjectNotActive: "That subject is inactive.",
-  Gradebook__GradeAlreadyGiven: "This student already has a grade for that subject.",
   Gradebook__GradeOutOfBounds: "Grade must be between 1 and 10.",
   Gradebook__SubjectNameEmpty: "Subject name cannot be empty.",
   Gradebook__CreditsOutOfBounds: "Credits must be between 1 and 30.",

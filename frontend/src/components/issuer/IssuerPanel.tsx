@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { getAddress, isAddress } from "viem";
+import { formatUnits, getAddress, isAddress } from "viem";
 import { useAccount, useChainId, usePublicClient, useSignTypedData, useWriteContract } from "wagmi";
 import { StudentRegistryABI } from "@/abi/StudentRegistry";
 import { UniversityCoreABI } from "@/abi/UniversityCore";
@@ -19,10 +19,9 @@ import { useLiveContractReads } from "@/lib/useLiveContractReads";
 import { formInputClassName } from "@/lib/formInputClassName";
 import { formatTxError } from "@/lib/wallet/formatTxError";
 import { runContractTx } from "@/lib/wallet/runContractTx";
-import { TxErrorAlert } from "@/components/shared/TxErrorAlert";
+import { useNotifications } from "@/lib/notifications/NotificationProvider";
 import { PageHeader } from "@/components/ui/PageHeader";
 import {
-  alertSuccessClass,
   btnSuccessClass,
   formInputMonoClassName,
   portalCardClass,
@@ -72,9 +71,8 @@ export function IssuerPanel() {
   const [preparedCredential, setPreparedCredential] = useState<UnivChainDiplomaCredential | null>(
     null
   );
-  const [message, setMessage] = useState<string | null>(null);
-  const [localError, setLocalError] = useState<string | null>(null);
 
+  const { notifyError, notifySuccess } = useNotifications();
   const { eligibility, isLoading: eligibilityLoading } = useGraduationEligibility(studentInput);
   const { invalidate } = useLiveContractReads(Boolean(isIssuer));
   const { writeContractAsync, isPending, reset } = useWriteContract();
@@ -96,17 +94,15 @@ export function IssuerPanel() {
 
   const handleSignAndPrepare = async () => {
     if (!publicClient || !address || chainId === undefined || !isAddress(studentInput)) {
-      alert("Connect wallet and enter a valid student address.");
+      notifyError("Connect wallet and enter a valid student address.");
       return;
     }
     if (!degreeTitle.trim() || !major.trim()) {
-      alert("Enter degree title and major.");
+      notifyError("Enter degree title and major.");
       return;
     }
 
     reset();
-    setMessage(null);
-    setLocalError(null);
     setPreparedCredential(null);
 
     try {
@@ -156,26 +152,28 @@ export function IssuerPanel() {
       });
 
       setPreparedCredential(credential);
-      setMessage(
-        "Credential signed. Download the JSON, pin it to IPFS, paste the URI below, then mint on-chain."
-      );
+      notifySuccess("Credential signed — download, pin, then mint.");
     } catch (e) {
-      setLocalError(formatTxError(e));
+      notifyError(formatTxError(e), "Transaction failed");
     }
   };
 
   const handleMint = async () => {
     if (!publicClient || !preparedCredential || !isAddress(studentInput)) {
-      alert("Sign and prepare the credential first.");
+      notifyError("Sign and prepare the credential first.");
       return;
     }
     if (!metadataUri.trim()) {
-      alert("Pin the credential JSON and enter its metadata URI (ipfs://… or https://…).");
+      notifyError("Pin the credential JSON and enter its metadata URI (ipfs://… or https://…).");
+      return;
+    }
+
+    if (eligibility?.eligible === false) {
+      notifyError("Student is not eligible to graduate (check credits, average, and debt).");
       return;
     }
 
     reset();
-    setLocalError(null);
 
     try {
       const student = getAddress(studentInput);
@@ -190,11 +188,11 @@ export function IssuerPanel() {
             args: [student, preparedCredential.evidence.documentHash, metadataUri.trim()],
           }),
       });
-      setMessage(`Diploma issued for ${student}. Enrollment closed; signed credential anchored on-chain.`);
+      notifySuccess(`Diploma issued for ${student}.`);
       setPreparedCredential(null);
       setMetadataUri("");
     } catch (e) {
-      setLocalError(formatTxError(e));
+      notifyError(formatTxError(e), "Transaction failed");
     }
   };
 
@@ -233,6 +231,13 @@ export function IssuerPanel() {
             <li>
               Weighted average: {eligibility.averageDisplay} (min {eligibility.minAverageDisplay}){" "}
               {eligibility.averageOk ? "✓" : "✗"}
+            </li>
+            <li>
+              University debt:{" "}
+              {eligibility.hasOutstandingDebt
+                ? `${formatUnits(eligibility.studentDebtOwed, 6)} tokens owed`
+                : "cleared"}{" "}
+              {eligibility.studentDebtOk ? "✓" : "✗"}
             </li>
             <li className={eligibility.eligible ? "text-emerald-300 font-medium" : "text-amber-300"}>
               {eligibility.eligible ? "Eligible to graduate" : "Not eligible yet"}
@@ -296,7 +301,7 @@ export function IssuerPanel() {
           <button
             type="button"
             onClick={handleMint}
-            disabled={isPending}
+            disabled={isPending || eligibility?.eligible === false}
             className={btnSuccessClass}
           >
             {isPending ? "Minting…" : "Graduate & mint on-chain"}
@@ -304,8 +309,6 @@ export function IssuerPanel() {
         </section>
       )}
 
-      {message && <p className={alertSuccessClass}>{message}</p>}
-      {localError && <TxErrorAlert message={localError} />}
     </div>
   );
 }

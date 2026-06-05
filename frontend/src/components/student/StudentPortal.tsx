@@ -7,6 +7,7 @@ import { CertificationABI } from "@/abi/Certification";
 import { useStudentProfile } from "@/lib/student/useStudentProfile";
 import { useStudentTranscript } from "@/lib/student/useStudentTranscript";
 import { StudentEnrollmentPanel } from "@/components/StudentEnrollmentPanel";
+import { StudentDebtSection } from "@/components/student/StudentDebtSection";
 import { StudentAcademicSummary } from "@/components/student/StudentAcademicSummary";
 import { StudentTranscriptSection } from "@/components/student/StudentTranscriptSection";
 import { RoleGateConnect } from "@/components/shared/RoleGate";
@@ -37,7 +38,9 @@ export function StudentPortal() {
   const chainId = useChainId();
   const deployment = chainId !== undefined ? getDeployment(chainId) : undefined;
   const profile = useStudentProfile();
-  const { rows, isLoading: transcriptLoading, error: transcriptError } = useStudentTranscript();
+  const { rows, isLoading: transcriptLoading, error: transcriptError } = useStudentTranscript(
+    profile.hasStudentRecord
+  );
   const [diplomaCredential, setDiplomaCredential] = useState<Awaited<
     ReturnType<typeof fetchDiplomaCredential>
   > | null>(null);
@@ -88,6 +91,13 @@ export function StudentPortal() {
 
       {profile.hasStudentRecord && (
         <>
+          {profile.deployment && profile.studentDebtOwed > 0n && (
+            <StudentDebtSection
+              deployment={profile.deployment}
+              debtOwed={profile.studentDebtOwed}
+            />
+          )}
+
           <section className={portalCardClass}>
             <div className="flex flex-wrap items-center gap-2 mb-3">
               <StatusBadge ok={profile.isEnrolled} label={profile.isEnrolled ? "Enrolled" : "Not enrolled"} />

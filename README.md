@@ -13,7 +13,7 @@ This guide covers everything you need to **clone, install, run, and test** the p
 | [`blockchain/`](blockchain/) | Solidity contracts (Foundry), tests, deploy scripts |
 | [`frontend/`](frontend/) | Next.js portal (RainbowKit / wagmi) — student, professor, admin, issuer, verifier |
 | [`indexer/`](indexer/) | SQLite-backed enrollment event indexer + REST API for the admin queue |
-| [`credentials/`](credentials/) | Off-chain diploma JSON format (`univchain-diploma-1`) and examples |
+| [`frontend/src/lib/diploma/`](frontend/src/lib/diploma/) | Off-chain diploma JSON format (`univchain-diploma-1`), examples, and TypeScript helpers |
 | [`scripts/`](scripts/) | Anvil helper, address sync into frontend + indexer |
 | [`Makefile`](Makefile) | One-command local stack (`make local`, `make dev`, …) |
 
@@ -268,11 +268,11 @@ Graduation requires enough **ECTS credits** and minimum **weighted average** (de
 1. Connect as a wallet with `DIPLOMA_ISSUER_ROLE`.
 2. Open **Issuer** (`/issuer`).
 3. Enter student address; confirm eligibility (credits + average).
-4. **Sign credential (EIP-712)** — builds [`univchain-diploma-1`](credentials/README.md) JSON.
+4. **Sign credential (EIP-712)** — builds [`univchain-diploma-1`](frontend/src/lib/diploma/README.md) JSON.
 5. **Download** `credential.json`, pin to IPFS (or host over HTTPS).
 6. Paste **metadata URI** (`ipfs://…`) and **Graduate & mint on-chain**.
 
-See [`credentials/README.md`](credentials/README.md) for JSON layout and hash rules.
+See [`frontend/src/lib/diploma/README.md`](frontend/src/lib/diploma/README.md) for JSON layout and hash rules.
 
 ### 5. Verifier — check a diploma
 
@@ -417,7 +417,7 @@ Indexer endpoints:
 ## Further reading
 
 - [`blockchain/README.md`](blockchain/README.md) — contract architecture, testing, Sepolia deployment  
-- [`credentials/README.md`](credentials/README.md) — EIP-712 diploma JSON (`univchain-diploma-1`)  
+- [`frontend/src/lib/diploma/README.md`](frontend/src/lib/diploma/README.md) — EIP-712 diploma JSON (`univchain-diploma-1`)  
 - [`indexer/README.md`](indexer/README.md) — indexer API and SQLite behaviour  
 
 ---

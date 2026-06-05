@@ -10,7 +10,7 @@ import { useLiveContractReads } from "@/lib/useLiveContractReads";
 import { formInputClassName } from "@/lib/formInputClassName";
 import { formatTxError } from "@/lib/wallet/formatTxError";
 import { runContractTx } from "@/lib/wallet/runContractTx";
-import { TxErrorAlert } from "@/components/shared/TxErrorAlert";
+import { useNotifications } from "@/lib/notifications/NotificationProvider";
 import {
   btnAccentClass,
   btnDangerClass,
@@ -18,7 +18,6 @@ import {
   btnSecondaryClass,
   btnVioletClass,
   formInputMonoClassName,
-  messageBoxClass,
   portalCardClass,
   portalSectionTitleClass,
 } from "@/lib/ui/portalClasses";
@@ -38,19 +37,41 @@ export function AdminOperationsPanel({ deployment }: Props) {
   const [diplomaTokenId, setDiplomaTokenId] = useState("");
   const [feeToken, setFeeToken] = useState(deployment.enrollmentToken ?? "");
   const [feeAmount, setFeeAmount] = useState("");
+  const [retakeFeePerCredit, setRetakeFeePerCredit] = useState("");
+  const [semesterTax, setSemesterTax] = useState("");
+  const [debtStudent, setDebtStudent] = useState("");
+  const [debtToken, setDebtToken] = useState(deployment.enrollmentToken ?? "");
+  const [retakeSubjectId, setRetakeSubjectId] = useState("");
   const [withdrawToken, setWithdrawToken] = useState(deployment.enrollmentToken ?? "");
   const [withdrawDestination, setWithdrawDestination] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
-  const [localError, setLocalError] = useState<string | null>(null);
+  const { notifyError, notifySuccess } = useNotifications();
 
   const feeTokenAddress = isAddress(feeToken) ? getAddress(feeToken) : undefined;
   const withdrawTokenAddress = isAddress(withdrawToken) ? getAddress(withdrawToken) : undefined;
 
+  const debtTokenAddress = isAddress(debtToken) ? getAddress(debtToken) : undefined;
+
   const { data: currentFee } = useReadContract({
     address: deployment.feeManager,
     abi: FeeManagerABI,
-    functionName: "getFeeAmountForToken",
+    functionName: "getRegistrationFeeForToken",
+    args: feeTokenAddress ? [feeTokenAddress] : undefined,
+    query: { enabled: Boolean(feeTokenAddress) },
+  });
+
+  const { data: currentRetakeFeePerCredit } = useReadContract({
+    address: deployment.feeManager,
+    abi: FeeManagerABI,
+    functionName: "getRetakeFeePerCreditForToken",
+    args: feeTokenAddress ? [feeTokenAddress] : undefined,
+    query: { enabled: Boolean(feeTokenAddress) },
+  });
+
+  const { data: currentSemesterTax } = useReadContract({
+    address: deployment.feeManager,
+    abi: FeeManagerABI,
+    functionName: "getSemesterTaxForToken",
     args: feeTokenAddress ? [feeTokenAddress] : undefined,
     query: { enabled: Boolean(feeTokenAddress) },
   });
@@ -65,19 +86,17 @@ export function AdminOperationsPanel({ deployment }: Props) {
 
   const runTx = async (label: string, write: () => Promise<`0x${string}`>) => {
     reset();
-    setMessage(null);
-    setLocalError(null);
     try {
       await runContractTx({ publicClient, invalidate, write });
-      setMessage(label);
+      notifySuccess(label);
     } catch (e) {
-      setLocalError(formatTxError(e));
+      notifyError(formatTxError(e), "Transaction failed");
     }
   };
 
   const handleExpel = () => {
     if (!isAddress(expelAddress)) {
-      alert("Enter a valid student wallet address.");
+      notifyError("Enter a valid student wallet address.");
       return;
     }
     const student = getAddress(expelAddress);
@@ -101,7 +120,7 @@ export function AdminOperationsPanel({ deployment }: Props) {
   const handleRevokeDiploma = () => {
     const tokenId = diplomaTokenId.trim();
     if (!/^\d+$/.test(tokenId) || BigInt(tokenId) <= 0n) {
-      alert("Enter a valid diploma token ID (positive integer).");
+      notifyError("Enter a valid diploma token ID (positive integer).");
       return;
     }
     if (!confirm(`Revoke diploma token #${tokenId}? This marks the diploma invalid on-chain.`)) {
@@ -121,39 +140,104 @@ export function AdminOperationsPanel({ deployment }: Props) {
     );
   };
 
-  const handleSetFee = () => {
+  const handleConfigureToken = () => {
     if (!feeTokenAddress) {
-      alert("Enter a valid ERC-20 token address.");
+      notifyError("Enter a valid ERC-20 token address.");
       return;
     }
-    const parsed = Number(feeAmount);
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-      alert("Enter a positive fee amount.");
+    const parsedRegistration = Number(feeAmount);
+    const parsedRetake = Number(retakeFeePerCredit);
+    if (!Number.isFinite(parsedRegistration) || parsedRegistration <= 0) {
+      notifyError("Enter a positive registration fee amount.");
+      return;
+    }
+    const parsedSemester = Number(semesterTax);
+    if (!Number.isFinite(parsedRetake) || parsedRetake < 0) {
+      notifyError("Enter a valid retake fee per credit (0 or greater).");
+      return;
+    }
+    if (!Number.isFinite(parsedSemester) || parsedSemester < 0) {
+      notifyError("Enter a valid semester tax (0 or greater).");
       return;
     }
 
-    void runTx(`Enrollment fee updated for ${feeTokenAddress}.`, () =>
+    void runTx(`Token configuration updated for ${feeTokenAddress}.`, () =>
       writeContractAsync({
         address: deployment.universityCore,
         abi: UniversityCoreABI,
-        functionName: "setTokenFee",
-        args: [feeTokenAddress, parseUnits(feeAmount, USDC_DECIMALS)],
+        functionName: "configureToken",
+        args: [
+          feeTokenAddress,
+          parseUnits(feeAmount, USDC_DECIMALS),
+          parseUnits(retakeFeePerCredit || "0", USDC_DECIMALS),
+          parseUnits(semesterTax || "0", USDC_DECIMALS),
+        ],
+      })
+    );
+  };
+
+  const handleAccrueRetakeTax = () => {
+    if (!isAddress(debtStudent)) {
+      notifyError("Enter a valid student wallet address.");
+      return;
+    }
+    if (!debtTokenAddress) {
+      notifyError("Enter a valid ERC-20 token address.");
+      return;
+    }
+    const subjectId = retakeSubjectId.trim();
+    if (!/^\d+$/.test(subjectId) || BigInt(subjectId) <= 0n) {
+      notifyError("Enter a valid subject ID (positive integer).");
+      return;
+    }
+
+    const student = getAddress(debtStudent);
+    void runTx(`Retake tax accrued for ${student} on subject #${subjectId}.`, () =>
+      writeContractAsync({
+        address: deployment.universityCore,
+        abi: UniversityCoreABI,
+        functionName: "accrueRetakeTax",
+        args: [student, debtTokenAddress, BigInt(subjectId)],
+      }).then((hash) => {
+        setRetakeSubjectId("");
+        return hash;
+      })
+    );
+  };
+
+  const handleAccrueSemesterTax = () => {
+    if (!isAddress(debtStudent)) {
+      notifyError("Enter a valid student wallet address.");
+      return;
+    }
+    if (!debtTokenAddress) {
+      notifyError("Enter a valid ERC-20 token address.");
+      return;
+    }
+
+    const student = getAddress(debtStudent);
+    void runTx(`Semester tax accrued for ${student}.`, () =>
+      writeContractAsync({
+        address: deployment.universityCore,
+        abi: UniversityCoreABI,
+        functionName: "accrueSemesterTax",
+        args: [student, debtTokenAddress],
       })
     );
   };
 
   const handleWithdraw = () => {
     if (!withdrawTokenAddress) {
-      alert("Enter a valid ERC-20 token address.");
+      notifyError("Enter a valid ERC-20 token address.");
       return;
     }
     if (!isAddress(withdrawDestination)) {
-      alert("Enter a valid destination wallet address.");
+      notifyError("Enter a valid destination wallet address.");
       return;
     }
     const parsed = Number(withdrawAmount);
     if (!Number.isFinite(parsed) || parsed <= 0) {
-      alert("Enter a positive withdrawal amount.");
+      notifyError("Enter a positive withdrawal amount.");
       return;
     }
 
@@ -222,13 +306,24 @@ export function AdminOperationsPanel({ deployment }: Props) {
       </div>
 
       <div className="flex flex-col gap-3 border-t border-white/10 pt-5">
-        <h3 className="portal-section-title">Set enrollment fee</h3>
+        <h3 className="portal-section-title">Configure payment token</h3>
         <p className="text-xs text-uc-muted">
-          Configure the registration fee for an accepted payment token (6 decimals, e.g. USDC).
+          Set the enrollment registration fee, retake fee per credit, and semester tax for a token (6
+          decimals, e.g. USDC).
         </p>
         {currentFee !== undefined && feeTokenAddress && (
           <p className="text-xs text-uc-muted">
-            Current fee: {formatUnits(currentFee, USDC_DECIMALS)} tokens
+            Current registration fee: {formatUnits(currentFee, USDC_DECIMALS)} tokens
+            {currentRetakeFeePerCredit !== undefined && (
+              <>
+                {" "}
+                · Retake fee per credit: {formatUnits(currentRetakeFeePerCredit, USDC_DECIMALS)}{" "}
+                tokens
+              </>
+            )}
+            {currentSemesterTax !== undefined && (
+              <> · Semester tax: {formatUnits(currentSemesterTax, USDC_DECIMALS)} tokens</>
+            )}
           </p>
         )}
         <input
@@ -239,19 +334,80 @@ export function AdminOperationsPanel({ deployment }: Props) {
         />
         <input
           className={formInputClassName}
-          placeholder="New fee amount (e.g. 10)"
+          placeholder="Registration fee (e.g. 10)"
           value={feeAmount}
           onChange={(e) => setFeeAmount(e.target.value)}
         />
-        <button type="button" onClick={handleSetFee} disabled={isPending} className={btnAccentClass}>
-          {isPending ? "Processing…" : "Update token fee"}
+        <input
+          className={formInputClassName}
+          placeholder="Retake fee per credit (e.g. 1)"
+          value={retakeFeePerCredit}
+          onChange={(e) => setRetakeFeePerCredit(e.target.value)}
+        />
+        <input
+          className={formInputClassName}
+          placeholder="Semester tax (e.g. 50)"
+          value={semesterTax}
+          onChange={(e) => setSemesterTax(e.target.value)}
+        />
+        <button
+          type="button"
+          onClick={handleConfigureToken}
+          disabled={isPending}
+          className={btnAccentClass}
+        >
+          {isPending ? "Processing…" : "Configure token"}
         </button>
+      </div>
+
+      <div className="flex flex-col gap-3 border-t border-white/10 pt-5">
+        <h3 className="portal-section-title">Accrue student debt</h3>
+        <p className="text-xs text-uc-muted">
+          Add retake or semester charges to a student&apos;s unified debt balance. Amounts are always
+          derived from on-chain configuration.
+        </p>
+        <input
+          className={formInputMonoClassName}
+          placeholder="Student wallet 0x…"
+          value={debtStudent}
+          onChange={(e) => setDebtStudent(e.target.value)}
+        />
+        <input
+          className={formInputMonoClassName}
+          placeholder="Token address 0x…"
+          value={debtToken}
+          onChange={(e) => setDebtToken(e.target.value)}
+        />
+        <input
+          className={formInputClassName}
+          placeholder="Subject ID (retake only)"
+          value={retakeSubjectId}
+          onChange={(e) => setRetakeSubjectId(e.target.value)}
+        />
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button
+            type="button"
+            onClick={handleAccrueRetakeTax}
+            disabled={isPending}
+            className={btnSecondaryClass}
+          >
+            {isPending ? "Processing…" : "Accrue retake tax"}
+          </button>
+          <button
+            type="button"
+            onClick={handleAccrueSemesterTax}
+            disabled={isPending}
+            className={btnSecondaryClass}
+          >
+            {isPending ? "Processing…" : "Accrue semester tax"}
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-col gap-3 border-t border-white/10 pt-5">
         <h3 className="portal-section-title">Withdraw treasury funds</h3>
         <p className="text-xs text-uc-muted">
-          Transfer collected registration fees from the FeeManager contract to a destination wallet.
+          Transfer collected fees and student debt payments from the FeeManager to a destination wallet.
         </p>
         {treasuryBalance !== undefined && withdrawTokenAddress && (
           <p className="text-xs text-uc-muted">
@@ -291,8 +447,6 @@ export function AdminOperationsPanel({ deployment }: Props) {
         </button>
       </div>
 
-      {message && <p className={messageBoxClass}>{message}</p>}
-      {localError && <TxErrorAlert message={localError} />}
     </section>
   );
 }

@@ -1,14 +1,19 @@
 import type { Database } from "better-sqlite3";
 import { createPublicClient, getAddress, http } from "viem";
 import { defineChain } from "viem";
-import { StudentRegistryABI, UniversityCoreABI } from "./abi.js";
+import { GradebookABI, StudentRegistryABI, UniversityCoreABI } from "./abi.js";
 import {
   ensureCoreAddress,
   getLastScannedBlock,
+  getLastGradebookScannedBlock,
   listPendingStudents,
   markEnrollmentStatus,
   setLastScannedBlock,
+  setLastGradebookScannedBlock,
+  setSubjectActive,
   upsertEnrollmentRequest,
+  upsertStudentGrade,
+  upsertSubject,
 } from "./db.js";
 import { loadConfig } from "./config.js";
 import { isStillPendingOnChain } from "./reconcile.js";
@@ -19,6 +24,9 @@ const LOG_CHUNK_SIZE = 2_000n;
 const enrollmentRequestedEvent = UniversityCoreABI[0];
 const enrollmentRejectedEvent = UniversityCoreABI[1];
 const studentEnrolledEvent = StudentRegistryABI[0];
+const subjectAddedEvent = GradebookABI[0];
+const gradePostedEvent = GradebookABI[1];
+const subjectActivityChangedEvent = GradebookABI[2];
 
 function createClient(config: IndexerConfig) {
   const chain = defineChain({
@@ -47,19 +55,70 @@ async function scanBlockRange(
   }
 }
 
+async function syncSubjectMetadata(
+  db: Database,
+  client: IndexerClient,
+  config: IndexerConfig,
+  subjectId: bigint
+) {
+  const [name, credits, professor, isActive] = await client.readContract({
+    address: config.gradebook,
+    abi: GradebookABI,
+    functionName: "getSubjectMetadata",
+    args: [subjectId],
+  });
+
+  upsertSubject(
+    db,
+    Number(subjectId),
+    name,
+    Number(credits),
+    getAddress(professor),
+    isActive
+  );
+}
+
+async function indexGradePosted(
+  db: Database,
+  client: IndexerClient,
+  config: IndexerConfig,
+  student: `0x${string}`,
+  subjectId: bigint,
+  blockNumber: number
+) {
+  await syncSubjectMetadata(db, client, config, subjectId);
+
+  const [grade, timestamp, professor] = await client.readContract({
+    address: config.gradebook,
+    abi: GradebookABI,
+    functionName: "getStudentGradeRecordOfSubject",
+    args: [student, subjectId],
+  });
+
+  upsertStudentGrade(
+    db,
+    getAddress(student).toLowerCase(),
+    Number(subjectId),
+    Number(grade),
+    blockNumber,
+    Number(timestamp),
+    getAddress(professor)
+  );
+}
+
 export async function runSync(db: Database): Promise<void> {
   const config = loadConfig();
   ensureCoreAddress(db, config);
   const client = createClient(config);
 
   const latest = await client.getBlockNumber();
-  let from = BigInt(getLastScannedBlock(db, config.deployBlock) + 1);
   const deployFrom = BigInt(config.deployBlock);
 
-  if (from < deployFrom) from = deployFrom;
+  let enrollFrom = BigInt(getLastScannedBlock(db, config.deployBlock) + 1);
+  if (enrollFrom < deployFrom) enrollFrom = deployFrom;
 
-  if (from <= latest) {
-    await scanBlockRange(client, from, latest, async (chunkFrom, chunkTo) => {
+  if (enrollFrom <= latest) {
+    await scanBlockRange(client, enrollFrom, latest, async (chunkFrom, chunkTo) => {
       const requestedLogs = await client.getLogs({
         address: config.universityCore,
         event: enrollmentRequestedEvent,
@@ -79,7 +138,7 @@ export async function runSync(db: Database): Promise<void> {
       }
     });
 
-    await scanBlockRange(client, from, latest, async (chunkFrom, chunkTo) => {
+    await scanBlockRange(client, enrollFrom, latest, async (chunkFrom, chunkTo) => {
       const rejectedLogs = await client.getLogs({
         address: config.universityCore,
         event: enrollmentRejectedEvent,
@@ -94,7 +153,7 @@ export async function runSync(db: Database): Promise<void> {
       }
     });
 
-    await scanBlockRange(client, from, latest, async (chunkFrom, chunkTo) => {
+    await scanBlockRange(client, enrollFrom, latest, async (chunkFrom, chunkTo) => {
       const enrolledLogs = await client.getLogs({
         address: config.studentRegistry,
         event: studentEnrolledEvent,
@@ -110,6 +169,77 @@ export async function runSync(db: Database): Promise<void> {
     });
 
     setLastScannedBlock(db, Number(latest));
+  }
+
+  let gradeFrom = BigInt(getLastGradebookScannedBlock(db, config.deployBlock) + 1);
+  if (gradeFrom < deployFrom) gradeFrom = deployFrom;
+
+  if (gradeFrom <= latest) {
+    const isBackfill = gradeFrom === deployFrom;
+    if (isBackfill) {
+      console.log(`[indexer] Scanning Gradebook events from block ${deployFrom} to ${latest}…`);
+    }
+
+    await scanBlockRange(client, gradeFrom, latest, async (chunkFrom, chunkTo) => {
+      const subjectLogs = await client.getLogs({
+        address: config.gradebook,
+        event: subjectAddedEvent,
+        fromBlock: chunkFrom,
+        toBlock: chunkTo,
+      });
+
+      for (const log of subjectLogs) {
+        const subjectId = log.args.subjectId;
+        if (subjectId === undefined) continue;
+        await syncSubjectMetadata(db, client, config, subjectId);
+      }
+    });
+
+    await scanBlockRange(client, gradeFrom, latest, async (chunkFrom, chunkTo) => {
+      const activityLogs = await client.getLogs({
+        address: config.gradebook,
+        event: subjectActivityChangedEvent,
+        fromBlock: chunkFrom,
+        toBlock: chunkTo,
+      });
+
+      for (const log of activityLogs) {
+        const subjectId = log.args.subjectId;
+        const isActive = log.args.isActive;
+        if (subjectId === undefined || isActive === undefined) continue;
+        setSubjectActive(db, Number(subjectId), isActive);
+      }
+    });
+
+    await scanBlockRange(client, gradeFrom, latest, async (chunkFrom, chunkTo) => {
+      const gradeLogs = await client.getLogs({
+        address: config.gradebook,
+        event: gradePostedEvent,
+        fromBlock: chunkFrom,
+        toBlock: chunkTo,
+      });
+
+      for (const log of gradeLogs) {
+        const student = log.args.student;
+        const subjectId = log.args.subjectId;
+        if (!student || subjectId === undefined) continue;
+
+        await indexGradePosted(
+          db,
+          client,
+          config,
+          getAddress(student),
+          subjectId,
+          Number(log.blockNumber ?? 0)
+        );
+      }
+    });
+
+    setLastGradebookScannedBlock(db, Number(latest));
+
+    if (isBackfill) {
+      console.log("[indexer] Gradebook backfill complete");
+    }
   }
 
   await reconcilePending(db, client, config);

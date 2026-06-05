@@ -45,7 +45,7 @@ contract IntegrationTest is Test {
         vm.startPrank(admin);
         core.addProfessor(professor);
         core.addDiplomaIssuer(issuer);
-        core.setTokenFee(address(mockToken), REGISTRATION_FEE);
+        core.configureToken(address(mockToken), REGISTRATION_FEE, 1 * 10 ** 6, 50 * 10 ** 6);
         vm.stopPrank();
     }
 
@@ -323,5 +323,98 @@ contract IntegrationTest is Test {
         assertFalse(registry.hasStudentGraduated(student));
         assertEq(certification.balanceOf(student), 0);
         assertFalse(certification.hasValidDiploma(student));
+    }
+
+    function test_RevertGraduationWhenStudentDebtOutstanding() public {
+        mockToken.mint(student, REGISTRATION_FEE);
+        vm.startPrank(student);
+        mockToken.approve(address(core), REGISTRATION_FEE);
+        core.requestEnrollment(address(mockToken));
+        vm.stopPrank();
+
+        vm.startPrank(admin);
+        core.acceptEnrollment(student, STUDENT_HASH);
+        core.addSubject("Retake Course", SUBJECT_ECTS, professor);
+        core.accrueRetakeTax(student, address(mockToken), 1);
+        vm.stopPrank();
+
+        vm.prank(professor);
+        core.postGrade(student, 1, 10);
+
+        vm.prank(issuer);
+        vm.expectRevert(
+            abi.encodeWithSelector(UniversityCore.UniversityCore__OutstandingStudentDebt.selector, student)
+        );
+        core.graduateStudentAndIssueDiploma(student, DIPLOMA_DOC_HASH, DIPLOMA_META_URI);
+    }
+
+    function test_GraduationAfterStudentDebtPaid() public {
+        mockToken.mint(student, REGISTRATION_FEE);
+        vm.startPrank(student);
+        mockToken.approve(address(core), REGISTRATION_FEE);
+        core.requestEnrollment(address(mockToken));
+        vm.stopPrank();
+
+        vm.startPrank(admin);
+        core.acceptEnrollment(student, STUDENT_HASH);
+        for (uint8 i = 0; i < SUBJECTS_FOR_GRADUATION; i++) {
+            core.addSubject(string(abi.encodePacked("Course ", vm.toString(i))), SUBJECT_ECTS, professor);
+        }
+        core.accrueRetakeTax(student, address(mockToken), 1);
+        vm.stopPrank();
+
+        vm.startPrank(professor);
+        for (uint256 subjectId = 1; subjectId <= SUBJECTS_FOR_GRADUATION; subjectId++) {
+            core.postGrade(student, subjectId, 10);
+        }
+        vm.stopPrank();
+
+        uint256 owed = feeManager.getStudentDebtOwed(student, address(mockToken));
+        mockToken.mint(student, owed);
+        vm.startPrank(student);
+        mockToken.approve(address(core), owed);
+        core.payStudentDebt(address(mockToken), owed);
+        vm.stopPrank();
+
+        assertEq(feeManager.getStudentDebtOwed(student, address(mockToken)), 0);
+
+        vm.prank(issuer);
+        core.graduateStudentAndIssueDiploma(student, DIPLOMA_DOC_HASH, DIPLOMA_META_URI);
+
+        assertTrue(registry.hasStudentGraduated(student));
+    }
+
+    function test_GraduationAfterSemesterTaxPaid() public {
+        mockToken.mint(student, REGISTRATION_FEE);
+        vm.startPrank(student);
+        mockToken.approve(address(core), REGISTRATION_FEE);
+        core.requestEnrollment(address(mockToken));
+        vm.stopPrank();
+
+        vm.startPrank(admin);
+        core.acceptEnrollment(student, STUDENT_HASH);
+        for (uint8 i = 0; i < SUBJECTS_FOR_GRADUATION; i++) {
+            core.addSubject(string(abi.encodePacked("Course ", vm.toString(i))), SUBJECT_ECTS, professor);
+        }
+        core.accrueSemesterTax(student, address(mockToken));
+        vm.stopPrank();
+
+        vm.startPrank(professor);
+        for (uint256 subjectId = 1; subjectId <= SUBJECTS_FOR_GRADUATION; subjectId++) {
+            core.postGrade(student, subjectId, 10);
+        }
+        vm.stopPrank();
+
+        uint256 owed = feeManager.getStudentDebtOwed(student, address(mockToken));
+        mockToken.mint(student, owed);
+        vm.startPrank(student);
+        mockToken.approve(address(core), owed);
+        core.payStudentDebt(address(mockToken), owed);
+        vm.stopPrank();
+
+        vm.prank(issuer);
+        core.graduateStudentAndIssueDiploma(student, DIPLOMA_DOC_HASH, DIPLOMA_META_URI);
+
+        assertTrue(registry.hasStudentGraduated(student));
     }
 }

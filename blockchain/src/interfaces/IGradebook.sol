@@ -27,8 +27,9 @@ interface IGradebook {
     /// @param professor The address of the professor leading the course.
     function addSubject(string calldata name, uint8 credits, address professor) external;
 
-    /// @notice Records a grade for a student in a specific subject.
-    /// @dev Verifies that the grade is valid (1-10) and only given once. Adds credits to student if grade >= 5.
+    /// @notice Records or updates a grade for a student in a specific subject.
+    /// @dev First post requires an active subject; updates are allowed when inactive (retakes). Credits and
+    /// weighted average follow the latest grade. Adds credits when grade >= 5.
     /// @param professor The address of the professor attempting to post the grade.
     /// @param student The address of the student receiving the grade.
     /// @param subjectId The unique identifier of the subject.
@@ -58,6 +59,11 @@ interface IGradebook {
     /// @param student The address of the student to query.
     /// @return credits Total sum of ECTS credits from all passed subjects.
     function getStudentCredits(address student) external view returns (uint256 credits);
+
+    /// @notice Lists subject IDs for which a student has at least one grade entry recorded.
+    /// @param student The address of the student to query.
+    /// @return subjectIds Array of subject IDs with grade records for the student.
+    function getStudentSubjectIds(address student) external view returns (uint256[] memory subjectIds);
 
     /// @notice Returns the address of the central University Core contract orchestrating this module.
     /// @return coreAddress The contract address of UniversityCore.

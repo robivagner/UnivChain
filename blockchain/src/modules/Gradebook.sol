@@ -18,7 +18,6 @@ contract Gradebook is IGradebook {
     error Gradebook__NotProfessorOfSubject(address wrongProfessor, uint256 subjectId);
     error Gradebook__GradeOutOfBounds(uint256 grade);
     error Gradebook__SubjectIdOutOfBounds(uint256 subjectId, uint256 upperBound);
-    error Gradebook__GradeAlreadyGiven(address student, uint256 subjectId, uint8 grade);
     error Gradebook__CreditsOutOfBounds(uint8 credits);
     error Gradebook__SubjectNameEmpty();
 
@@ -88,13 +87,20 @@ contract Gradebook is IGradebook {
         Subject memory subject = s_subjects[subjectId];
         GradeRecord storage record = s_studentGrades[student][subjectId];
 
-        _postGradeChecks(record, subject, student, professor, subjectId, grade);
+        _validateGradePost(subject, professor, subjectId, grade);
 
-        if (grade >= PASSING_GRADE) {
-            s_studentCredits[student] += subject.credits;
+        uint8 oldGrade = record.grade;
+        bool isUpdate = oldGrade != 0;
+
+        if (!isUpdate && !subject.isActive) {
+            revert Gradebook__SubjectNotActive(subjectId);
         }
 
-        s_studentSubjectIds[student].push(subjectId);
+        if (!isUpdate) {
+            s_studentSubjectIds[student].push(subjectId);
+        }
+
+        _adjustStudentCredits(student, subject.credits, oldGrade, grade);
 
         record.grade = grade;
         record.timestamp = block.timestamp;
@@ -149,6 +155,11 @@ contract Gradebook is IGradebook {
     }
 
     /// @inheritdoc IGradebook
+    function getStudentSubjectIds(address student) external view returns (uint256[] memory) {
+        return s_studentSubjectIds[student];
+    }
+
+    /// @inheritdoc IGradebook
     function getUniversityCoreContract() external view returns (address) {
         return address(i_coreContract);
     }
@@ -184,31 +195,32 @@ contract Gradebook is IGradebook {
     //////////////////////////////////
 
     /**
-     * @notice Performs strict sanity assertions prior to modifying state in postGrade.
-     * @dev Internal view helper minimizing gas overhead through stack variable evaluations.
+     * @notice Validates professor, bounds, and grade range for posting or updating a mark.
      */
-    function _postGradeChecks(
-        GradeRecord memory record,
-        Subject memory subject,
-        address student,
-        address professor,
-        uint256 subjectId,
-        uint8 grade
-    ) internal view {
-        if (record.grade != 0) {
-            revert Gradebook__GradeAlreadyGiven(student, subjectId, grade);
-        }
+    function _validateGradePost(Subject memory subject, address professor, uint256 subjectId, uint8 grade)
+        internal
+        view
+    {
         if (subjectId >= s_tokenIdCounter) {
             revert Gradebook__SubjectIdOutOfBounds(subjectId, s_tokenIdCounter);
-        }
-        if (!subject.isActive) {
-            revert Gradebook__SubjectNotActive(subjectId);
         }
         if (professor != subject.professor) {
             revert Gradebook__NotProfessorOfSubject(professor, subjectId);
         }
         if (grade > 10 || grade < 1) {
             revert Gradebook__GradeOutOfBounds(grade);
+        }
+    }
+
+    /**
+     * @notice Adjusts accumulated ECTS when a grade is first posted or updated (e.g. after a retake).
+     */
+    function _adjustStudentCredits(address student, uint8 subjectCredits, uint8 oldGrade, uint8 newGrade) internal {
+        if (oldGrade >= PASSING_GRADE) {
+            s_studentCredits[student] -= subjectCredits;
+        }
+        if (newGrade >= PASSING_GRADE) {
+            s_studentCredits[student] += subjectCredits;
         }
     }
 }

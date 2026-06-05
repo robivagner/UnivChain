@@ -2,6 +2,8 @@
 
 Off-chain diplomas use **EIP-712 signed JSON** pinned at the on-chain `metadataURI`.
 
+Implementation lives in this folder (`credential.ts`, `types.ts`, `verifyCredential.ts`).
+
 ## Format
 
 See [`examples/univchain-diploma.example.json`](examples/univchain-diploma.example.json).

@@ -6,7 +6,7 @@ import { UniversityCoreABI } from "@/abi/UniversityCore";
 import { hashStudentMatriculation } from "@/lib/matriculation";
 import { formatTxError } from "@/lib/wallet/formatTxError";
 import { runContractTx } from "@/lib/wallet/runContractTx";
-import { TxErrorAlert } from "@/components/shared/TxErrorAlert";
+import { useNotifications } from "@/lib/notifications/NotificationProvider";
 import type { UnivChainDeployment } from "@/constants/contracts";
 import type { PendingEnrollmentRequest } from "@/lib/enrollment/types";
 import { formInputClassName, formLabelClass } from "@/lib/formInputClassName";
@@ -26,8 +26,8 @@ type Props = {
 export function PendingEnrollmentRow({ request, deployment, onSettled }: Props) {
   const publicClient = usePublicClient();
   const { txBusy, runAdminTx } = useAdminTx();
+  const { notifyError, notifySuccess } = useNotifications();
   const [matriculation, setMatriculation] = useState("");
-  const [localError, setLocalError] = useState<string | null>(null);
   const { writeContractAsync, isPending, reset } = useWriteContract();
 
   const busy = txBusy || isPending;
@@ -35,13 +35,12 @@ export function PendingEnrollmentRow({ request, deployment, onSettled }: Props) 
   const handleAccept = () => {
     if (!publicClient) return;
     if (!matriculation.trim()) {
-      alert("Enter a matriculation number for this student.");
+      notifyError("Enter a matriculation number for this student.");
       return;
     }
 
     void runAdminTx(async () => {
       reset();
-      setLocalError(null);
       try {
         await runContractTx({
           publicClient,
@@ -54,9 +53,10 @@ export function PendingEnrollmentRow({ request, deployment, onSettled }: Props) 
             }),
         });
         setMatriculation("");
+        notifySuccess(`Enrollment accepted for ${request.student}.`);
         await onSettled(request.student);
       } catch (e) {
-        setLocalError(formatTxError(e));
+        notifyError(formatTxError(e), "Transaction failed");
       }
     });
   };
@@ -67,7 +67,6 @@ export function PendingEnrollmentRow({ request, deployment, onSettled }: Props) 
 
     void runAdminTx(async () => {
       reset();
-      setLocalError(null);
       try {
         await runContractTx({
           publicClient,
@@ -79,9 +78,10 @@ export function PendingEnrollmentRow({ request, deployment, onSettled }: Props) 
               args: [request.student],
             }),
         });
+        notifySuccess(`Enrollment rejected for ${request.student}.`);
         await onSettled(request.student);
       } catch (e) {
-        setLocalError(formatTxError(e));
+        notifyError(formatTxError(e), "Transaction failed");
       }
     });
   };
@@ -129,8 +129,6 @@ export function PendingEnrollmentRow({ request, deployment, onSettled }: Props) 
           Reject
         </button>
       </div>
-
-      {localError && <TxErrorAlert message={localError} />}
     </li>
   );
 }

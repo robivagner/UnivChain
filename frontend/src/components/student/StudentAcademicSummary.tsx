@@ -98,6 +98,12 @@ export function StudentAcademicSummary({ profile }: { profile: Profile }) {
             target={profile.minAverageDisplay ?? "—"}
             ok={profile.averageOk}
           />
+          <ProgressRow
+            label="University debt"
+            value={profile.hasOutstandingDebt ? "Outstanding" : "Cleared"}
+            target="Cleared"
+            ok={profile.studentDebtOk}
+          />
           <p
             className={`text-sm font-medium ${
               profile.graduationEligible ? "text-emerald-300" : "text-amber-300"

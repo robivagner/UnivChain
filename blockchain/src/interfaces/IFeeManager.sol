@@ -2,49 +2,50 @@
 pragma solidity ^0.8.25;
 
 /// @title Interface for University Fee Manager
-/// @notice Handles ERC20 payments (stablecoins) for student enrollment registration fees.
+/// @notice Handles enrollment registration fees (voucher flow) and unified student debt (retake + semester taxes).
 /// @dev Implemented by the FeeManager contract to act as the treasury hub.
 interface IFeeManager {
-    /// @notice Defines the allowed tokens and their exact required fee amount (accounting for decimals).
-    /// @dev Can only be called by the UniversityCore contract via admin actions.
+    /// @notice Configures token payment settings for enrollment and student debt accruals.
     /// @param token The ERC20 token address.
-    /// @param feeAmount The amount required to pay the registration fee (0 means token not allowed).
-    function setTokenFee(address token, uint256 feeAmount) external;
+    /// @param registrationFee Enrollment registration fee (0 disables enrollment with this token).
+    /// @param retakeFeePerCredit Retake tax per ECTS credit (0 disables retake accrual in this token).
+    /// @param semesterTax Fixed semester tax amount (0 disables semester accrual in this token).
+    function configureToken(
+        address token,
+        uint256 registrationFee,
+        uint256 retakeFeePerCredit,
+        uint256 semesterTax
+    ) external;
 
     /// @notice Allows a student to pay their registration fee using an allowed ERC20 token.
-    /// @dev Pulls tokens from UniversityCore (which extracts them from the student) into this contract.
-    /// @param token The ERC20 token the student wishes to pay with.
-    /// @param student The wallet address of the student applying for enrollment.
     function payRegistrationFee(address token, address student) external;
 
-    /// @notice Consumes a student's payment voucher during successful enrollment.
-    /// @dev Can only be called by the UniversityCore contract. Resets payment tracking status.
-    /// @param student The address of the student whose voucher is being consumed.
+    /// @notice Accrues retake tax based on subject credits and the configured fee-per-credit.
+    function accrueRetakeTax(address student, address token, uint8 subjectCredits) external;
+
+    /// @notice Accrues one semester tax using the configured fixed semester amount.
+    function accrueSemesterTax(address student, address token) external;
+
+    /// @notice Applies a student's payment toward their unified outstanding debt.
+    function payStudentDebt(address token, address student, uint256 amount) external;
+
     function consumeFeeVoucher(address student) external;
 
-    /// @notice Allows the university administration to withdraw accumulated institutional fees.
-    /// @dev Can only be called by the UniversityCore contract via admin actions.
-    /// @param token The ERC20 token contract address to withdraw.
-    /// @param destination The wallet address receiving the withdrawn funds.
-    /// @param amount The exact amount of tokens to transfer.
     function withdrawFunds(address token, address destination, uint256 amount) external;
 
-    /// @notice Reverts a student's payment voucher and transfers the exact paid amount back to them.
-    /// @dev Can only be called by the UniversityCore contract when an application is rejected.
-    /// @param student The wallet address of the student receiving the refund.
     function processRefund(address student) external;
 
-    /// @notice Checks if a student has successfully paid the registration fee and holds an active voucher.
-    /// @param student The wallet address of the student to check.
-    /// @return A boolean indicating whether the student has paid and is pending enrollment.
-    function hasPaidFee(address student) external view returns (bool);
+    function hasPaidFee(address student) external view returns (bool hasPaid);
 
-    /// @notice Retrieves the immutable address of the linked central UniversityCore orchestrator.
-    /// @return The contract address of UniversityCore.
-    function getUniversityCoreContract() external view returns (address);
+    function hasOutstandingDebt(address student) external view returns (bool hasOutstanding);
 
-    /// @notice Retrieves the required registration fee amount configured for a specific token.
-    /// @param token The contract address of the ERC20 token.
-    /// @return The fee amount required (0 indicates the token is disabled).
-    function getFeeAmountForToken(address token) external view returns (uint256);
+    function getStudentDebtOwed(address student, address token) external view returns (uint256 owed);
+
+    function getUniversityCoreContract() external view returns (address core);
+
+    function getRegistrationFeeForToken(address token) external view returns (uint256 registrationFee);
+
+    function getRetakeFeePerCreditForToken(address token) external view returns (uint256 retakeFeePerCredit);
+
+    function getSemesterTaxForToken(address token) external view returns (uint256 semesterTax);
 }

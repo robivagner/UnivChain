@@ -16,6 +16,10 @@ contract MockGradebook is IGradebook {
         return 30;
     }
 
+    function getStudentSubjectIds(address) external pure returns (uint256[] memory) {
+        return new uint256[](0);
+    }
+
     function getUniversityCoreContract() external view returns (address) {
         return msg.sender;
     }

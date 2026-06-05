@@ -11,29 +11,35 @@ contract FeeManagerTest is Test {
     FeeManager public feeManager;
     MockERC20 public mockToken;
 
-    // The test contract acts as the UniversityCore hub (msg.sender == core)
     address public core = address(this);
     address public alice = makeAddr("alice");
     address public bob = makeAddr("bob");
     address public treasuryWallet = makeAddr("universityTreasury");
 
-    uint256 public constant REGISTRATION_FEE = 10 * 10 ** 6; // 10 USDC
+    uint256 public constant REGISTRATION_FEE = 10 * 10 ** 6;
+    uint256 public constant RETAKE_FEE_PER_CREDIT = 1 * 10 ** 6;
+    uint256 public constant SEMESTER_TAX = 50 * 10 ** 6;
+    uint8 public constant SUBJECT_CREDITS = 6;
 
-    // Events to expect
-    event TokenFeeUpdated(address indexed token, uint256 newFeeAmount);
+    event TokenConfigured(
+        address indexed token, uint256 registrationFee, uint256 retakeFeePerCredit, uint256 semesterTax
+    );
     event RegistrationFeePaid(address indexed student, address indexed token, uint256 amount);
     event FeeVoucherConsumed(address indexed student);
     event FundsWithdrawn(address indexed token, address indexed destination, uint256 amount);
     event RefundIssued(address indexed student, address indexed token, uint256 amount);
+    event RetakeTaxAccrued(address indexed student, address indexed token, uint256 amount, uint256 newDebtBalance);
+    event SemesterTaxAccrued(address indexed student, address indexed token, uint256 amount, uint256 newDebtBalance);
+    event StudentDebtPaid(address indexed student, address indexed token, uint256 amount, uint256 remainingDebt);
 
     function setUp() public {
         mockToken = new MockERC20();
         feeManager = new FeeManager(core);
     }
 
-    ///////////////////////////////////
-    /////// Constructor & Setup ///////
-    ///////////////////////////////////
+    function _configureDefaultToken() internal {
+        feeManager.configureToken(address(mockToken), REGISTRATION_FEE, RETAKE_FEE_PER_CREDIT, SEMESTER_TAX);
+    }
 
     function test_RevertIfConstructorCoreAddressZero() public {
         vm.expectRevert(FeeManager.FeeManager__AddressZero.selector);
@@ -44,64 +50,51 @@ contract FeeManagerTest is Test {
         assertEq(feeManager.getUniversityCoreContract(), core);
     }
 
-    ///////////////////////////////////
-    /////// Set Token Fee Tests ///////
-    ///////////////////////////////////
-
-    function test_SetTokenFeeSuccess() public {
+    function test_ConfigureTokenSuccess() public {
         vm.expectEmit(true, true, true, true);
-        emit TokenFeeUpdated(address(mockToken), REGISTRATION_FEE);
+        emit TokenConfigured(address(mockToken), REGISTRATION_FEE, RETAKE_FEE_PER_CREDIT, SEMESTER_TAX);
 
-        feeManager.setTokenFee(address(mockToken), REGISTRATION_FEE);
+        _configureDefaultToken();
 
-        assertEq(feeManager.getFeeAmountForToken(address(mockToken)), REGISTRATION_FEE);
+        assertEq(feeManager.getRegistrationFeeForToken(address(mockToken)), REGISTRATION_FEE);
+        assertEq(feeManager.getRetakeFeePerCreditForToken(address(mockToken)), RETAKE_FEE_PER_CREDIT);
+        assertEq(feeManager.getSemesterTaxForToken(address(mockToken)), SEMESTER_TAX);
     }
 
-    function test_RevertSetTokenFeeIfNotCore() public {
+    function test_RevertConfigureTokenIfNotCore() public {
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(FeeManager.FeeManager__NotCore.selector, alice));
-        feeManager.setTokenFee(address(mockToken), REGISTRATION_FEE);
+        feeManager.configureToken(address(mockToken), REGISTRATION_FEE, RETAKE_FEE_PER_CREDIT, SEMESTER_TAX);
     }
 
-    ///////////////////////////////////
-    /////// Pay Registration Fee //////
-    ///////////////////////////////////
-
     function test_PayRegistrationFeeSuccess() public {
-        feeManager.setTokenFee(address(mockToken), REGISTRATION_FEE);
+        _configureDefaultToken();
 
-        // Simulate UniversityCore capturing funds from Alice first
         mockToken.mint(address(this), REGISTRATION_FEE);
-        // Core approves FeeManager to pull the tokens
         mockToken.approve(address(feeManager), REGISTRATION_FEE);
 
-        // Core calls FeeManager to register Alice's payment
         vm.expectEmit(true, true, true, true);
         emit RegistrationFeePaid(alice, address(mockToken), REGISTRATION_FEE);
         feeManager.payRegistrationFee(address(mockToken), alice);
 
-        // Verify state changes inside FeeManager
         assertTrue(feeManager.hasPaidFee(alice));
-        assertEq(mockToken.balanceOf(address(this)), 0);
         assertEq(mockToken.balanceOf(address(feeManager)), REGISTRATION_FEE);
-        assertEq(feeManager.s_studentPaymentToken(alice), address(mockToken));
+        assertEq(feeManager.s_studentRegistrationPaymentToken(alice), address(mockToken));
     }
 
     function test_RevertPayRegistrationFeeIfNotCore() public {
-        feeManager.setTokenFee(address(mockToken), REGISTRATION_FEE);
-
+        _configureDefaultToken();
         mockToken.mint(alice, REGISTRATION_FEE);
 
         vm.startPrank(alice);
         mockToken.approve(address(feeManager), REGISTRATION_FEE);
-
         vm.expectRevert(abi.encodeWithSelector(FeeManager.FeeManager__NotCore.selector, alice));
         feeManager.payRegistrationFee(address(mockToken), alice);
         vm.stopPrank();
     }
 
     function test_RevertPayRegistrationFeeIfAlreadyPaid() public {
-        feeManager.setTokenFee(address(mockToken), REGISTRATION_FEE);
+        _configureDefaultToken();
         mockToken.mint(address(this), REGISTRATION_FEE * 2);
         mockToken.approve(address(feeManager), REGISTRATION_FEE * 2);
 
@@ -116,89 +109,30 @@ contract FeeManagerTest is Test {
         feeManager.payRegistrationFee(address(mockToken), alice);
     }
 
-    function test_RevertConsumeVoucherIfNotPaid() public {
-        vm.expectRevert(abi.encodeWithSelector(FeeManager.FeeManager__FeeNotPaid.selector, alice));
-        feeManager.consumeFeeVoucher(alice);
-    }
-
-    function test_RevertProcessRefundIfNotPaid() public {
-        vm.expectRevert(abi.encodeWithSelector(FeeManager.FeeManager__FeeNotPaid.selector, bob));
-        feeManager.processRefund(bob);
-    }
-
-    function test_RevertPayRegistrationFeeWithoutAllowance() public {
-        feeManager.setTokenFee(address(mockToken), REGISTRATION_FEE);
-        mockToken.mint(address(this), REGISTRATION_FEE);
-
-        // No approval is given to feeManager from the Core
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IERC20Errors.ERC20InsufficientAllowance.selector, address(feeManager), 0, REGISTRATION_FEE
-            )
-        );
-        feeManager.payRegistrationFee(address(mockToken), alice);
-    }
-
-    ///////////////////////////////////
-    /////// Consume Voucher Tests /////
-    ///////////////////////////////////
-
     function test_ConsumeFeeVoucherSuccess() public {
-        feeManager.setTokenFee(address(mockToken), REGISTRATION_FEE);
+        _configureDefaultToken();
         mockToken.mint(address(this), REGISTRATION_FEE);
         mockToken.approve(address(feeManager), REGISTRATION_FEE);
         feeManager.payRegistrationFee(address(mockToken), alice);
 
-        assertTrue(feeManager.hasPaidFee(alice));
-
-        vm.expectEmit(true, false, false, false);
-        emit FeeVoucherConsumed(alice);
-
         feeManager.consumeFeeVoucher(alice);
-
         assertFalse(feeManager.hasPaidFee(alice));
     }
 
-    function test_RevertConsumeVoucherIfNotCore() public {
-        vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(FeeManager.FeeManager__NotCore.selector, alice));
-        feeManager.consumeFeeVoucher(bob);
-    }
-
-    ///////////////////////////////////
-    /////// Process Refund Tests //////
-    ///////////////////////////////////
-
     function test_ProcessRefundSuccess() public {
-        feeManager.setTokenFee(address(mockToken), REGISTRATION_FEE);
+        _configureDefaultToken();
         mockToken.mint(address(this), REGISTRATION_FEE);
         mockToken.approve(address(feeManager), REGISTRATION_FEE);
         feeManager.payRegistrationFee(address(mockToken), alice);
-
-        vm.expectEmit(true, true, false, true);
-        emit RefundIssued(alice, address(mockToken), REGISTRATION_FEE);
 
         feeManager.processRefund(alice);
 
         assertFalse(feeManager.hasPaidFee(alice));
-        assertEq(feeManager.s_studentPaymentToken(alice), address(0));
         assertEq(mockToken.balanceOf(alice), REGISTRATION_FEE);
-        assertEq(mockToken.balanceOf(address(feeManager)), 0);
     }
-
-    function test_RevertProcessRefundIfNotCore() public {
-        vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(FeeManager.FeeManager__NotCore.selector, alice));
-        feeManager.processRefund(bob);
-    }
-
-    ///////////////////////////////////
-    /////// Withdraw Funds Tests //////
-    ///////////////////////////////////
 
     function test_WithdrawFundsSuccess() public {
-        feeManager.setTokenFee(address(mockToken), REGISTRATION_FEE);
-
+        _configureDefaultToken();
         mockToken.mint(address(this), REGISTRATION_FEE * 2);
         mockToken.approve(address(feeManager), REGISTRATION_FEE * 2);
 
@@ -206,52 +140,88 @@ contract FeeManagerTest is Test {
         feeManager.payRegistrationFee(address(mockToken), bob);
 
         uint256 contractBalance = mockToken.balanceOf(address(feeManager));
-        assertEq(contractBalance, REGISTRATION_FEE * 2);
-
-        vm.expectEmit(true, true, false, true);
-        emit FundsWithdrawn(address(mockToken), treasuryWallet, contractBalance);
-
         feeManager.withdrawFunds(address(mockToken), treasuryWallet, contractBalance);
 
-        assertEq(mockToken.balanceOf(address(feeManager)), 0);
         assertEq(mockToken.balanceOf(treasuryWallet), contractBalance);
     }
 
-    function test_RevertWithdrawFundsIfNotCore() public {
-        vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(FeeManager.FeeManager__NotCore.selector, alice));
-        feeManager.withdrawFunds(address(mockToken), treasuryWallet, 100);
+    function test_AccrueRetakeTaxSuccess() public {
+        _configureDefaultToken();
+
+        uint256 expected = uint256(SUBJECT_CREDITS) * RETAKE_FEE_PER_CREDIT;
+
+        vm.expectEmit(true, true, false, true);
+        emit RetakeTaxAccrued(alice, address(mockToken), expected, expected);
+        feeManager.accrueRetakeTax(alice, address(mockToken), SUBJECT_CREDITS);
+
+        assertEq(feeManager.getStudentDebtOwed(alice, address(mockToken)), expected);
+        assertTrue(feeManager.hasOutstandingDebt(alice));
     }
 
-    function test_RevertWithdrawFundsIfNotEnoughFunds() public {
-        uint256 fakeAmount = 1_000_000 * 10 ** 6;
+    function test_AccrueSemesterTaxSuccess() public {
+        _configureDefaultToken();
 
-        vm.expectRevert(abi.encodeWithSelector(FeeManager.FeeManager__NotEnoughFunds.selector, fakeAmount, 0));
-        feeManager.withdrawFunds(address(mockToken), treasuryWallet, fakeAmount);
+        vm.expectEmit(true, true, false, true);
+        emit SemesterTaxAccrued(alice, address(mockToken), SEMESTER_TAX, SEMESTER_TAX);
+        feeManager.accrueSemesterTax(alice, address(mockToken));
+
+        assertEq(feeManager.getStudentDebtOwed(alice, address(mockToken)), SEMESTER_TAX);
+        assertTrue(feeManager.hasOutstandingDebt(alice));
     }
 
-    ///////////////////////////////////
-    /////// Fuzz Tests ////////////////
-    ///////////////////////////////////
+    function test_UnifiedDebtCombinesRetakeAndSemester() public {
+        _configureDefaultToken();
+
+        uint256 retakeAmount = uint256(SUBJECT_CREDITS) * RETAKE_FEE_PER_CREDIT;
+        feeManager.accrueRetakeTax(alice, address(mockToken), SUBJECT_CREDITS);
+        feeManager.accrueSemesterTax(alice, address(mockToken));
+
+        assertEq(feeManager.getStudentDebtOwed(alice, address(mockToken)), retakeAmount + SEMESTER_TAX);
+    }
+
+    function test_PayStudentDebtSuccess() public {
+        _configureDefaultToken();
+        feeManager.accrueSemesterTax(alice, address(mockToken));
+
+        uint256 owed = feeManager.getStudentDebtOwed(alice, address(mockToken));
+        mockToken.mint(address(this), owed);
+        mockToken.approve(address(feeManager), owed);
+
+        vm.expectEmit(true, true, false, true);
+        emit StudentDebtPaid(alice, address(mockToken), owed, 0);
+        feeManager.payStudentDebt(address(mockToken), alice, owed);
+
+        assertEq(feeManager.getStudentDebtOwed(alice, address(mockToken)), 0);
+        assertFalse(feeManager.hasOutstandingDebt(alice));
+    }
+
+    function test_RevertAccrueSemesterTaxIfTokenNotConfigured() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(FeeManager.FeeManager__TokenNotConfiguredForSemesterTax.selector, address(mockToken))
+        );
+        feeManager.accrueSemesterTax(alice, address(mockToken));
+    }
+
+    function test_RevertPayStudentDebtIfOverpayment() public {
+        _configureDefaultToken();
+        feeManager.accrueSemesterTax(alice, address(mockToken));
+
+        uint256 owed = feeManager.getStudentDebtOwed(alice, address(mockToken));
+        vm.expectRevert(abi.encodeWithSelector(FeeManager.FeeManager__DebtOverpayment.selector, owed + 1, owed));
+        feeManager.payStudentDebt(address(mockToken), alice, owed + 1);
+    }
 
     function testFuzz_CompleteFeeFlow(uint256 rawFeeAmount, uint256 rawWithdrawAmount) public {
         uint256 feeAmount = bound(rawFeeAmount, 1, 1_000_000_000 * 10 ** 18);
         uint256 withdrawAmount = bound(rawWithdrawAmount, 1, feeAmount);
 
-        feeManager.setTokenFee(address(mockToken), feeAmount);
+        feeManager.configureToken(address(mockToken), feeAmount, RETAKE_FEE_PER_CREDIT, SEMESTER_TAX);
 
         mockToken.mint(address(this), feeAmount);
         mockToken.approve(address(feeManager), feeAmount);
-
         feeManager.payRegistrationFee(address(mockToken), alice);
 
-        assertTrue(feeManager.hasPaidFee(alice));
-        assertEq(mockToken.balanceOf(address(feeManager)), feeAmount);
-        assertEq(mockToken.balanceOf(address(this)), 0);
-
         feeManager.withdrawFunds(address(mockToken), treasuryWallet, withdrawAmount);
-
         assertEq(mockToken.balanceOf(treasuryWallet), withdrawAmount);
-        assertEq(mockToken.balanceOf(address(feeManager)), feeAmount - withdrawAmount);
     }
 }

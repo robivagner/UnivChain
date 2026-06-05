@@ -2,12 +2,12 @@
 
 import { useMemo } from "react";
 import { getAddress, isAddress } from "viem";
-import { useReadContracts } from "wagmi";
+import { useChainId, useReadContract, useReadContracts } from "wagmi";
 import { CertificationABI } from "@/abi/Certification";
+import { FeeManagerABI } from "@/abi/FeeManager";
 import { GradebookABI } from "@/abi/Gradebook";
 import { StudentRegistryABI } from "@/abi/StudentRegistry";
 import { getDeployment } from "@/lib/contracts";
-import { useChainId } from "wagmi";
 
 export function useGraduationEligibility(studentInput: string) {
   const chainId = useChainId();
@@ -20,62 +20,83 @@ export function useGraduationEligibility(studentInput: string) {
 
   const enabled = Boolean(deployment && student);
 
+  const contracts = useMemo(() => {
+    if (!deployment || !student) return [];
+
+    return [
+      {
+        address: deployment.studentRegistry,
+        abi: StudentRegistryABI,
+        functionName: "isStudentEnrolled" as const,
+        args: [student] as const,
+      },
+      {
+        address: deployment.studentRegistry,
+        abi: StudentRegistryABI,
+        functionName: "hasStudentGraduated" as const,
+        args: [student] as const,
+      },
+      {
+        address: deployment.studentRegistry,
+        abi: StudentRegistryABI,
+        functionName: "isStudentExpelled" as const,
+        args: [student] as const,
+      },
+      {
+        address: deployment.certification,
+        abi: CertificationABI,
+        functionName: "hasDiploma" as const,
+        args: [student] as const,
+      },
+      {
+        address: deployment.gradebook,
+        abi: GradebookABI,
+        functionName: "getStudentCredits" as const,
+        args: [student] as const,
+      },
+      {
+        address: deployment.gradebook,
+        abi: GradebookABI,
+        functionName: "getWeightedAverage" as const,
+        args: [student] as const,
+      },
+      {
+        address: deployment.certification,
+        abi: CertificationABI,
+        functionName: "i_creditsRequiredForGraduation" as const,
+      },
+      {
+        address: deployment.certification,
+        abi: CertificationABI,
+        functionName: "i_minimumAverageForGraduation" as const,
+      },
+      {
+        address: deployment.feeManager,
+        abi: FeeManagerABI,
+        functionName: "hasOutstandingDebt" as const,
+        args: [student] as const,
+      },
+    ];
+  }, [deployment, student]);
+
   const { data, isLoading } = useReadContracts({
-    contracts: student
-      ? [
-          {
-            address: deployment!.studentRegistry,
-            abi: StudentRegistryABI,
-            functionName: "isStudentEnrolled",
-            args: [student],
-          },
-          {
-            address: deployment!.studentRegistry,
-            abi: StudentRegistryABI,
-            functionName: "hasStudentGraduated",
-            args: [student],
-          },
-          {
-            address: deployment!.studentRegistry,
-            abi: StudentRegistryABI,
-            functionName: "isStudentExpelled",
-            args: [student],
-          },
-          {
-            address: deployment!.certification,
-            abi: CertificationABI,
-            functionName: "hasDiploma",
-            args: [student],
-          },
-          {
-            address: deployment!.gradebook,
-            abi: GradebookABI,
-            functionName: "getStudentCredits",
-            args: [student],
-          },
-          {
-            address: deployment!.gradebook,
-            abi: GradebookABI,
-            functionName: "getWeightedAverage",
-            args: [student],
-          },
-          {
-            address: deployment!.certification,
-            abi: CertificationABI,
-            functionName: "i_creditsRequiredForGraduation",
-          },
-          {
-            address: deployment!.certification,
-            abi: CertificationABI,
-            functionName: "i_minimumAverageForGraduation",
-          },
-        ]
-      : [],
+    contracts,
     query: { enabled },
   });
 
+  const { data: studentDebtOwedRaw, isLoading: debtOwedLoading } = useReadContract({
+    address: deployment?.feeManager,
+    abi: FeeManagerABI,
+    functionName: "getStudentDebtOwed",
+    args:
+      student && deployment?.enrollmentToken
+        ? [student, deployment.enrollmentToken]
+        : undefined,
+    query: { enabled: enabled && Boolean(deployment?.enrollmentToken) },
+  });
+
   const parsed = useMemo(() => {
-    if (!data || data.length < 8) return undefined;
+    if (!data || data.length < 9) return undefined;
 
     const getBool = (i: number) => data[i]?.status === "success" && data[i].result === true;
     const getUint = (i: number) =>
@@ -93,9 +114,18 @@ export function useGraduationEligibility(studentInput: string) {
 
     const creditsOk = credits >= creditsRequired;
     const averageOk = average >= minAverage;
+    const hasOutstandingDebt = getBool(8);
+    const studentDebtOk = !hasOutstandingDebt;
+    const studentDebtOwed = studentDebtOwedRaw ?? 0n;
 
     const eligible =
-      enrolled && !graduated && !expelled && !hasDiploma && creditsOk && averageOk;
+      enrolled &&
+      !graduated &&
+      !expelled &&
+      !hasDiploma &&
+      creditsOk &&
+      averageOk &&
+      studentDebtOk;
 
     return {
       enrolled,
@@ -110,9 +140,17 @@ export function useGraduationEligibility(studentInput: string) {
       minAverage,
       minAverageDisplay: (Number(minAverage) / 100).toFixed(2),
       averageOk,
+      hasOutstandingDebt,
+      studentDebtOk,
+      studentDebtOwed,
       eligible,
     };
-  }, [data]);
+  }, [data, studentDebtOwedRaw]);
 
-  return { student, eligibility: parsed, isLoading: enabled && isLoading, deployment };
+  return {
+    student,
+    eligibility: parsed,
+    isLoading: enabled && (isLoading || debtOwedLoading),
+    deployment,
+  };
 }

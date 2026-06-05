@@ -8,6 +8,13 @@ export const GradebookABI = [
   },
   {
     type: "function",
+    name: "getStudentSubjectIds",
+    inputs: [{ name: "student", type: "address" }],
+    outputs: [{ name: "subjectIds", type: "uint256[]" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
     name: "s_studentSubjectIds",
     inputs: [{ name: "student", type: "address" }],
     outputs: [{ name: "", type: "uint256[]" }],

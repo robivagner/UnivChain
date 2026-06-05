@@ -129,14 +129,55 @@ contract GradebookTest is Test {
         gradebook.postGrade(professor, student, 1, 10);
     }
 
-    function test_RevertIfGradeAlreadyGiven() public {
+    function test_UpdateGradeFailToPass() public {
         vm.startPrank(core);
-        gradebook.postGrade(professor, student, 1, 5);
+        gradebook.postGrade(professor, student, 1, 4);
+        assertEq(gradebook.getStudentCredits(student), 0);
 
-        // Attempting to overwrite an existing grade should revert
-        vm.expectRevert(abi.encodeWithSelector(Gradebook.Gradebook__GradeAlreadyGiven.selector, student, 1, 7));
+        gradebook.postGrade(professor, student, 1, 8);
+        vm.stopPrank();
+
+        (uint8 grade,,) = gradebook.getStudentGradeRecordOfSubject(student, 1);
+        assertEq(grade, 8);
+        assertEq(gradebook.getStudentCredits(student), 6);
+        assertEq(gradebook.getWeightedAverage(student), 800);
+    }
+
+    function test_UpdateGradePassToFail() public {
+        vm.startPrank(core);
+        gradebook.postGrade(professor, student, 1, 10);
+        assertEq(gradebook.getStudentCredits(student), 6);
+
+        gradebook.postGrade(professor, student, 1, 3);
+        vm.stopPrank();
+
+        (uint8 grade,,) = gradebook.getStudentGradeRecordOfSubject(student, 1);
+        assertEq(grade, 3);
+        assertEq(gradebook.getStudentCredits(student), 0);
+        assertEq(gradebook.getWeightedAverage(student), 0);
+    }
+
+    function test_UpdateGradeWhenSubjectInactive() public {
+        vm.startPrank(core);
+        gradebook.postGrade(professor, student, 1, 4);
+        gradebook.setSubjectActivity(professor, 1, false);
         gradebook.postGrade(professor, student, 1, 7);
         vm.stopPrank();
+
+        (uint8 grade,,) = gradebook.getStudentGradeRecordOfSubject(student, 1);
+        assertEq(grade, 7);
+        assertEq(gradebook.getStudentCredits(student), 6);
+    }
+
+    function test_UpdateGradeDoesNotDuplicateSubjectIds() public {
+        vm.startPrank(core);
+        gradebook.postGrade(professor, student, 1, 4);
+        gradebook.postGrade(professor, student, 1, 8);
+        vm.stopPrank();
+
+        uint256[] memory subjectIds = gradebook.getStudentSubjectIds(student);
+        assertEq(subjectIds.length, 1);
+        assertEq(subjectIds[0], 1);
     }
 
     function test_RevertPostGradeOutOfBounds() public {

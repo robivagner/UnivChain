@@ -364,7 +364,7 @@ contract UniversityCoreTest is Test {
         core.expellStudent(alice);
 
         vm.expectRevert(UniversityCore.UniversityCore__NotInitialized.selector);
-        core.setTokenFee(address(mockToken), 100);
+        core.configureToken(address(mockToken), 100, 0, 0);
 
         vm.expectRevert(UniversityCore.UniversityCore__NotInitialized.selector);
         core.withdrawUniversityFunds(address(mockToken), bob, 100);

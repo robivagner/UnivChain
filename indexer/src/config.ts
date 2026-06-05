@@ -19,6 +19,7 @@ export function loadConfig(): IndexerConfig {
     "deployBlock",
     "universityCore",
     "studentRegistry",
+    "gradebook",
     "feeManager",
   ] as const) {
     if (raw[key] === undefined || raw[key] === "") {

@@ -1,9 +1,8 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import type { PublicClient } from "viem";
-import { useAccount, usePublicClient } from "wagmi";
-import { GradebookABI } from "@/abi/Gradebook";
+import { getAddress } from "viem";
+import { useAccount, useChainId } from "wagmi";
 import { getDeployment } from "@/lib/contracts";
 
 export type TranscriptRow = {
@@ -15,62 +14,50 @@ export type TranscriptRow = {
   professor: `0x${string}`;
 };
 
-async function fetchTranscript(
-  publicClient: PublicClient,
-  gradebook: `0x${string}`,
-  student: `0x${string}`
-): Promise<TranscriptRow[]> {
-  const counter = await publicClient.readContract({
-    address: gradebook,
-    abi: GradebookABI,
-    functionName: "s_tokenIdCounter",
-  });
+type ApiResponse = {
+  transcript: Array<{
+    subjectId: number;
+    subjectName: string;
+    credits: number;
+    grade: number;
+    gradedAt: number | null;
+    professor: string;
+  }>;
+};
 
-  if (counter <= 1n) return [];
+async function fetchTranscriptFromIndexer(student: `0x${string}`): Promise<TranscriptRow[]> {
+  const res = await fetch(
+    `/api/student/transcript?student=${encodeURIComponent(student)}`,
+    { cache: "no-store" }
+  );
+  const body = (await res.json()) as ApiResponse & { error?: string; hint?: string };
 
-  const rows: TranscriptRow[] = [];
-
-  for (let subjectId = 1n; subjectId < counter; subjectId++) {
-    const [grade, timestamp, professor] = await publicClient.readContract({
-      address: gradebook,
-      abi: GradebookABI,
-      functionName: "getStudentGradeRecordOfSubject",
-      args: [student, subjectId],
-    });
-
-    if (grade === 0) continue;
-
-    const [name, credits] = await publicClient.readContract({
-      address: gradebook,
-      abi: GradebookABI,
-      functionName: "getSubjectMetadata",
-      args: [subjectId],
-    });
-
-    rows.push({
-      subjectId,
-      subjectName: name,
-      credits: Number(credits),
-      grade: Number(grade),
-      gradedAt: timestamp > 0n ? new Date(Number(timestamp) * 1000) : null,
-      professor,
-    });
+  if (!res.ok) {
+    const parts = [body.error, body.hint].filter(Boolean).join(" — ");
+    throw new Error(parts || `Request failed (${res.status})`);
   }
 
-  return rows.sort((a, b) => Number(a.subjectId - b.subjectId));
+  return body.transcript.map((row) => ({
+    subjectId: BigInt(row.subjectId),
+    subjectName: row.subjectName,
+    credits: row.credits,
+    grade: row.grade,
+    gradedAt: row.gradedAt != null ? new Date(row.gradedAt * 1000) : null,
+    professor: getAddress(row.professor),
+  }));
 }
 
-export function useStudentTranscript() {
+export function useStudentTranscript(enabled = true) {
   const { address, chainId } = useAccount();
-  const publicClient = usePublicClient();
   const deployment = chainId !== undefined ? getDeployment(chainId) : undefined;
-  const gradebook = deployment?.gradebook;
+  const student = address ? getAddress(address) : undefined;
 
   const { data: rows = [], isLoading, error } = useQuery({
-    queryKey: ["student-transcript", chainId, address, gradebook],
-    enabled: Boolean(publicClient && gradebook && address),
-    staleTime: 5_000,
-    queryFn: () => fetchTranscript(publicClient!, gradebook!, address!),
+    queryKey: ["student-transcript", chainId, deployment?.gradebook, student],
+    enabled: Boolean(enabled && student && deployment?.gradebook),
+    staleTime: 2_000,
+    refetchInterval: 15_000,
+    queryFn: () => fetchTranscriptFromIndexer(student!),
   });
 
   return {

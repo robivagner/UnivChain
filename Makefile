@@ -42,7 +42,7 @@ help:
 	@echo "  make anvil-logs       Tail Anvil log"
 	@echo "  make deploy           Deploy contracts to running Anvil"
 	@echo "  make sync-frontend    Copy addresses from broadcast/ into frontend constants"
-	@echo "  make setup-dev        deploy + sync + Mock USDC + setTokenFee on Core"
+	@echo "  make setup-dev        deploy + sync + Mock USDC + configureToken on Core"
 	@echo "  make local            Fresh Anvil + deploy + sync + setup-dev + clear indexer DB"
 	@echo "  make clean-indexer-data  Remove indexer/data (SQLite)"
 	@echo "  make redeploy         anvil-stop, fresh anvil, deploy, sync-frontend"

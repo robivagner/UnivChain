@@ -13,12 +13,11 @@ import { AdminTxProvider, useAdminTx } from "./AdminTxContext";
 import { formInputClassName } from "@/lib/formInputClassName";
 import { formatTxError } from "@/lib/wallet/formatTxError";
 import { runContractTx } from "@/lib/wallet/runContractTx";
-import { TxErrorAlert } from "@/components/shared/TxErrorAlert";
+import { useNotifications } from "@/lib/notifications/NotificationProvider";
 import {
   btnSecondaryClass,
   formInputMonoClassName,
   portalCardClass,
-  portalPageTitleClass,
   portalSectionTitleClass,
 } from "@/lib/ui/portalClasses";
 import {
@@ -51,7 +50,7 @@ function AdminEnrollmentsPanelContent({ embedded = false }: Props) {
 
   const [manualAddress, setManualAddress] = useState("");
   const [manualMatriculation, setManualMatriculation] = useState("");
-  const [manualError, setManualError] = useState<string | null>(null);
+  const { notifyError, notifySuccess } = useNotifications();
   const { txBusy, runAdminTx } = useAdminTx();
   const { writeContractAsync, isPending: isManualPending, reset } = useWriteContract();
 
@@ -75,13 +74,12 @@ function AdminEnrollmentsPanelContent({ embedded = false }: Props) {
 
   const handleManualAccept = () => {
     if (!publicClient || !isAddress(manualAddress) || !manualMatriculation.trim()) {
-      alert("Enter a valid student address and matriculation number.");
+      notifyError("Enter a valid student address and matriculation number.");
       return;
     }
 
     void runAdminTx(async () => {
       reset();
-      setManualError(null);
       try {
         const student = getAddress(manualAddress);
         await runContractTx({
@@ -96,35 +94,25 @@ function AdminEnrollmentsPanelContent({ embedded = false }: Props) {
         });
         setManualAddress("");
         setManualMatriculation("");
+        notifySuccess(`Enrollment accepted for ${student}.`);
         await refreshAfterAction(student);
       } catch (e) {
-        setManualError(formatTxError(e));
+        notifyError(formatTxError(e), "Transaction failed");
       }
     });
   };
 
   const manualBusy = txBusy || isManualPending;
 
-  const TitleTag = embedded ? "h2" : "h1";
-
   return (
     <div className={`flex flex-col gap-8 ${embedded ? "" : "max-w-2xl mx-auto"}`}>
       <section>
-        <TitleTag className={`${portalPageTitleClass} mb-2 ${embedded ? "!text-xl" : ""}`}>
-          Enrollment requests
-        </TitleTag>
-        <p className="text-sm text-uc-muted leading-relaxed">
-          Pending requests come from the UnivChain indexer, reconciled with on-chain state. After
-          accept or reject, the row disappears immediately and the indexer syncs on demand.
-        </p>
-        {isFetching && !isLoading && (
-          <p className="text-xs text-uc-cyan mt-2">Refreshing…</p>
-        )}
-      </section>
-
-      <section>
-        <h3 className={portalSectionTitleClass}>Pending ({pending.length})</h3>
-
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3">
+          <h3 className={portalSectionTitleClass}>Pending ({pending.length})</h3>
+          {isFetching && !isLoading && (
+            <p className="text-xs text-uc-cyan">Refreshing…</p>
+          )}
+        </div>
         {isLoading && (
           <p className="text-sm text-uc-muted py-8 text-center">Loading pending requests…</p>
         )}
@@ -182,7 +170,6 @@ function AdminEnrollmentsPanelContent({ embedded = false }: Props) {
           >
             {manualBusy ? "Processing…" : "Accept manually"}
           </button>
-          {manualError && <TxErrorAlert message={manualError} />}
         </div>
       </section>
     </div>

@@ -157,6 +157,7 @@ function writeIndexerConfig(deployments) {
     deployBlock: deployments.deployBlock,
     universityCore: deployments.universityCore,
     studentRegistry: deployments.studentRegistry,
+    gradebook: deployments.gradebook,
     feeManager: deployments.feeManager,
   };
   fs.mkdirSync(path.dirname(INDEXER_CONFIG), { recursive: true });

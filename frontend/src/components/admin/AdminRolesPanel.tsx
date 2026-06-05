@@ -8,12 +8,11 @@ import type { UnivChainDeployment } from "@/constants/contracts";
 import { useLiveContractReads } from "@/lib/useLiveContractReads";
 import { formatTxError } from "@/lib/wallet/formatTxError";
 import { runContractTx } from "@/lib/wallet/runContractTx";
-import { TxErrorAlert } from "@/components/shared/TxErrorAlert";
+import { useNotifications } from "@/lib/notifications/NotificationProvider";
 import {
   btnAccentClass,
   btnSecondaryClass,
   formInputMonoClassName,
-  messageBoxClass,
   portalCardClass,
   portalSectionTitleClass,
 } from "@/lib/ui/portalClasses";
@@ -26,19 +25,16 @@ export function AdminRolesPanel({ deployment }: Props) {
   const publicClient = usePublicClient();
   const [professorAddress, setProfessorAddress] = useState("");
   const [issuerAddress, setIssuerAddress] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
-  const [localError, setLocalError] = useState<string | null>(null);
+  const { notifyError, notifySuccess } = useNotifications();
   const { invalidate } = useLiveContractReads(true);
   const { writeContractAsync, isPending, reset } = useWriteContract();
 
   const handleAddProfessor = async () => {
     if (!isAddress(professorAddress)) {
-      alert("Enter a valid professor wallet address.");
+      notifyError("Enter a valid professor wallet address.");
       return;
     }
     reset();
-    setMessage(null);
-    setLocalError(null);
     try {
       const granted = getAddress(professorAddress);
       await runContractTx({
@@ -53,20 +49,18 @@ export function AdminRolesPanel({ deployment }: Props) {
           }),
       });
       setProfessorAddress("");
-      setMessage(`Professor role granted to ${granted}.`);
+      notifySuccess(`Professor role granted to ${granted}.`);
     } catch (e) {
-      setLocalError(formatTxError(e));
+      notifyError(formatTxError(e), "Transaction failed");
     }
   };
 
   const handleAddIssuer = async () => {
     if (!isAddress(issuerAddress)) {
-      alert("Enter a valid diploma issuer wallet address.");
+      notifyError("Enter a valid diploma issuer wallet address.");
       return;
     }
     reset();
-    setMessage(null);
-    setLocalError(null);
     try {
       const granted = getAddress(issuerAddress);
       await runContractTx({
@@ -81,9 +75,9 @@ export function AdminRolesPanel({ deployment }: Props) {
           }),
       });
       setIssuerAddress("");
-      setMessage(`Diploma issuer role granted to ${granted}.`);
+      notifySuccess(`Diploma issuer role granted to ${granted}.`);
     } catch (e) {
-      setLocalError(formatTxError(e));
+      notifyError(formatTxError(e), "Transaction failed");
     }
   };
 
@@ -132,9 +126,6 @@ export function AdminRolesPanel({ deployment }: Props) {
           {isPending ? "Processing…" : "Grant DIPLOMA_ISSUER_ROLE"}
         </button>
       </div>
-
-      {message && <p className={messageBoxClass}>{message}</p>}
-      {localError && <TxErrorAlert message={localError} />}
     </section>
   );
 }

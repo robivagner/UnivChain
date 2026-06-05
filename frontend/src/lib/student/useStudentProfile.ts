@@ -137,6 +137,24 @@ export function useStudentProfile() {
     query: { enabled: Boolean(deployment?.universityCore) },
   });
 
+  const paymentToken = deployment?.enrollmentToken;
+
+  const { data: hasOutstandingDebt, isLoading: l15 } = useReadContract({
+    address: feeManager,
+    abi: FeeManagerABI,
+    functionName: "hasOutstandingDebt",
+    args: address ? [address] : undefined,
+    query: { enabled: enabled && hasStudentRecord },
+  });
+
+  const { data: studentDebtOwed, isLoading: l16 } = useReadContract({
+    address: feeManager,
+    abi: FeeManagerABI,
+    functionName: "getStudentDebtOwed",
+    args: address && paymentToken ? [address, paymentToken] : undefined,
+    query: { enabled: enabled && hasStudentRecord && Boolean(paymentToken) },
+  });
+
   const parsedMetadata = useMemo(
     () => parseStudentMetadata(studentMetadata),
     [studentMetadata]
@@ -162,16 +180,19 @@ export function useStudentProfile() {
       ? weightedAverage >= minAverage
       : undefined;
 
+  const studentDebtOk = hasOutstandingDebt === false;
+
   const graduationEligible =
     hasStudentRecord &&
     !Boolean(isExpelled) &&
     !Boolean(hasGraduated) &&
     !Boolean(hasDiploma) &&
     creditsOk === true &&
-    averageOk === true;
+    averageOk === true &&
+    studentDebtOk;
 
   const isLoading =
-    l1 || l2 || l3 || l4 || l5 || l6 || l7 || l8 || l9 || l10 || l11 || l12 || l13 || l14;
+    l1 || l2 || l3 || l4 || l5 || l6 || l7 || l8 || l9 || l10 || l11 || l12 || l13 || l14 || l15 || l16;
 
   return {
     deployment,
@@ -192,6 +213,9 @@ export function useStudentProfile() {
     creditsOk,
     averageOk,
     graduationEligible,
+    hasOutstandingDebt: Boolean(hasOutstandingDebt),
+    studentDebtOwed: studentDebtOwed ?? 0n,
+    studentDebtOk,
     hasDiploma: Boolean(hasDiploma),
     hasValidDiploma: Boolean(hasValidDiploma),
     diplomaTokenId: diplomaTokenId && diplomaTokenId > 0n ? diplomaTokenId : undefined,

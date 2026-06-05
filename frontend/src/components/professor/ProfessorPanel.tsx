@@ -6,18 +6,19 @@ import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { UniversityCoreABI } from "@/abi/UniversityCore";
 import { useIsProfessor } from "@/lib/useIsProfessor";
 import { useProfessorSubjects } from "@/lib/useProfessorSubjects";
+import { useProfessorGrades, type ProfessorGradeRow } from "@/lib/professor/useProfessorGrades";
 import { useLiveContractReads } from "@/lib/useLiveContractReads";
 import { formInputClassName } from "@/lib/formInputClassName";
 import { formatTxError } from "@/lib/wallet/formatTxError";
 import { runContractTx } from "@/lib/wallet/runContractTx";
-import { TxErrorAlert } from "@/components/shared/TxErrorAlert";
+import { useNotifications } from "@/lib/notifications/NotificationProvider";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ProfessorGradesTable } from "@/components/professor/ProfessorGradesTable";
 import {
   btnAccentClass,
   btnSecondaryClass,
   btnSuccessClass,
   formInputMonoClassName,
-  messageBoxClass,
   portalCardClass,
   portalPageClass,
   portalSectionTitleClass,
@@ -29,11 +30,29 @@ import {
   RoleGateLoading,
   RoleGateMissingDeployment,
 } from "@/components/shared/RoleGate";
+import {
+  PortalSectionNav,
+  PortalSectionNavMobile,
+} from "@/components/layout/PortalSectionNav";
+import { usePortalSectionNavigation } from "@/lib/navigation/usePortalSectionNavigation";
+import { PORTAL_SECTION_ANCHOR_CLASS } from "@/lib/navigation/portalSectionNav";
+
+const PROFESSOR_SECTIONS = [
+  { id: "grades", label: "Grades" },
+  { id: "subjects", label: "Subjects" },
+  { id: "add-subject", label: "Add subject" },
+  { id: "post-grade", label: "Post grade" },
+  { id: "activity", label: "Activity" },
+] as const;
+
+type ProfessorSection = (typeof PROFESSOR_SECTIONS)[number]["id"];
 
 export function ProfessorPanel() {
   const { address, isConnected } = useAccount();
   const { isProfessor, isLoading: roleLoading, deployment } = useIsProfessor();
-  const { subjects, isLoading: subjectsLoading } = useProfessorSubjects();
+  const readsEnabled = Boolean(deployment && isProfessor);
+  const { subjects, isLoading: subjectsLoading, refreshFromIndexer: refreshSubjects } =
+    useProfessorSubjects(readsEnabled);
   const publicClient = usePublicClient();
 
   const [subjectName, setSubjectName] = useState("");
@@ -43,15 +62,27 @@ export function ProfessorPanel() {
   const [gradeValue, setGradeValue] = useState("8");
   const [activitySubjectId, setActivitySubjectId] = useState("");
   const [activityActive, setActivityActive] = useState(true);
-  const [message, setMessage] = useState<string | null>(null);
-  const [localError, setLocalError] = useState<string | null>(null);
 
-  const readsEnabled = Boolean(deployment && isProfessor);
+  const { notifyError, notifySuccess } = useNotifications();
   const { invalidate } = useLiveContractReads(readsEnabled);
   const { writeContractAsync, isPending, reset } = useWriteContract();
 
+  const {
+    rows: gradeRows,
+    isLoading: gradesLoading,
+    error: gradesError,
+    refreshAfterGradeChange,
+  } = useProfessorGrades(readsEnabled);
+
+  const { activeSection, jumpToSection } = usePortalSectionNavigation<ProfessorSection>(
+    PROFESSOR_SECTIONS,
+    "grades",
+    readsEnabled
+  );
+
   const invalidateReads = async () => {
     await invalidate();
+    await Promise.all([refreshAfterGradeChange(), refreshSubjects()]);
   };
 
   if (!isConnected) return <RoleGateConnect title="the professor portal" />;
@@ -68,20 +99,33 @@ export function ProfessorPanel() {
     );
   }
 
+  const submitGrade = async (student: `0x${string}`, subjectId: bigint, grade: number) => {
+    reset();
+    await runContractTx({
+      publicClient,
+      invalidate: invalidateReads,
+      write: () =>
+        writeContractAsync({
+          address: deployment.universityCore,
+          abi: UniversityCoreABI,
+          functionName: "postGrade",
+          args: [student, subjectId, grade],
+        }),
+    });
+  };
+
   const handleAddSubject = async () => {
     if (!subjectName.trim()) {
-      alert("Enter a subject name.");
+      notifyError("Enter a subject name.");
       return;
     }
     const credits = Number(subjectCredits);
     if (!Number.isInteger(credits) || credits < 1 || credits > 30) {
-      alert("Credits must be an integer between 1 and 30.");
+      notifyError("Credits must be an integer between 1 and 30.");
       return;
     }
 
     reset();
-    setMessage(null);
-    setLocalError(null);
     try {
       await runContractTx({
         publicClient,
@@ -95,59 +139,62 @@ export function ProfessorPanel() {
           }),
       });
       setSubjectName("");
-      setMessage("Subject created and assigned to your wallet.");
+      notifySuccess("Subject created and assigned to your wallet.");
     } catch (e) {
-      setLocalError(formatTxError(e));
+      notifyError(formatTxError(e), "Transaction failed");
     }
   };
 
   const handlePostGrade = async () => {
     if (!isAddress(gradeStudent)) {
-      alert("Enter a valid student address.");
+      notifyError("Enter a valid student address.");
       return;
     }
     const subjectId = BigInt(gradeSubjectId || "0");
     const grade = Number(gradeValue);
     if (subjectId <= 0n) {
-      alert("Enter a valid subject ID.");
+      notifyError("Enter a valid subject ID.");
       return;
     }
     if (!Number.isInteger(grade) || grade < 1 || grade > 10) {
-      alert("Grade must be an integer from 1 to 10.");
+      notifyError("Grade must be an integer from 1 to 10.");
       return;
     }
 
-    reset();
-    setMessage(null);
-    setLocalError(null);
     try {
-      await runContractTx({
-        publicClient,
-        invalidate: invalidateReads,
-        write: () =>
-          writeContractAsync({
-            address: deployment.universityCore,
-            abi: UniversityCoreABI,
-            functionName: "postGrade",
-            args: [getAddress(gradeStudent), subjectId, grade],
-          }),
-      });
-      setMessage("Grade posted on-chain.");
+      await submitGrade(getAddress(gradeStudent), subjectId, grade);
+      notifySuccess("Grade posted on-chain.");
     } catch (e) {
-      setLocalError(formatTxError(e));
+      notifyError(formatTxError(e), "Transaction failed");
+    }
+  };
+
+  const handleUpdateGrade = async (row: ProfessorGradeRow, newGrade: number) => {
+    if (!Number.isInteger(newGrade) || newGrade < 1 || newGrade > 10) {
+      notifyError("Grade must be an integer from 1 to 10.");
+      return;
+    }
+    if (newGrade === row.grade) {
+      notifyError("Enter a different grade to update.");
+      return;
+    }
+
+    try {
+      await submitGrade(row.student, row.subjectId, newGrade);
+      notifySuccess(`Grade updated to ${newGrade} for ${row.subjectName}.`);
+    } catch (e) {
+      notifyError(formatTxError(e), "Transaction failed");
     }
   };
 
   const handleSetActivity = async () => {
     const subjectId = BigInt(activitySubjectId || "0");
     if (subjectId <= 0n) {
-      alert("Enter a valid subject ID.");
+      notifyError("Enter a valid subject ID.");
       return;
     }
 
     reset();
-    setMessage(null);
-    setLocalError(null);
     try {
       await runContractTx({
         publicClient,
@@ -160,21 +207,51 @@ export function ProfessorPanel() {
             args: [subjectId, activityActive],
           }),
       });
-      setMessage(`Subject #${subjectId} is now ${activityActive ? "active" : "inactive"}.`);
+      notifySuccess(`Subject #${subjectId} is now ${activityActive ? "active" : "inactive"}.`);
     } catch (e) {
-      setLocalError(formatTxError(e));
+      notifyError(formatTxError(e), "Transaction failed");
     }
   };
 
   return (
-    <div className={portalPageClass}>
-      <PageHeader
-        kicker="Faculty workspace"
-        title="Professor portal"
-        description="Create subjects assigned to your wallet, post grades for enrolled students (1–10), and activate or deactivate your courses."
+    <>
+      <PortalSectionNav
+        sections={PROFESSOR_SECTIONS}
+        active={activeSection}
+        onSelect={(id) => jumpToSection(id as ProfessorSection)}
+        ariaLabel="Professor sections"
       />
 
-      <section className={portalCardClass}>
+      <div className={portalPageClass}>
+        <PageHeader
+          kicker="Faculty workspace"
+          title="Professor portal"
+          description="Manage your subjects, review all student grades in one table, and update marks when students retake a course."
+        />
+
+        <PortalSectionNavMobile
+          sections={PROFESSOR_SECTIONS}
+          active={activeSection}
+          onSelect={(id) => jumpToSection(id as ProfessorSection)}
+          ariaLabel="Professor sections"
+        />
+
+        <section id="grades" className={`${portalCardClass} ${PORTAL_SECTION_ANCHOR_CLASS}`}>
+        <h2 className={portalSectionTitleClass}>Student grades</h2>
+        <p className="text-xs text-uc-muted mb-4">
+          All grades posted for your subjects. Use &ldquo;Change grade&rdquo; to update a mark after a
+          retake or correction.
+        </p>
+        <ProfessorGradesTable
+          rows={gradeRows}
+          isLoading={gradesLoading}
+          error={gradesError}
+          txPending={isPending}
+          onUpdateGrade={handleUpdateGrade}
+        />
+      </section>
+
+      <section id="subjects" className={`${portalCardClass} ${PORTAL_SECTION_ANCHOR_CLASS} border-t border-white/10 pt-10`}>
         <h2 className={portalSectionTitleClass}>Your subjects</h2>
         {subjectsLoading && <p className="text-sm text-uc-muted">Loading subjects…</p>}
         {!subjectsLoading && subjects.length === 0 && (
@@ -199,7 +276,10 @@ export function ProfessorPanel() {
         )}
       </section>
 
-      <section className={`${portalCardClass} flex flex-col gap-3`}>
+      <section
+        id="add-subject"
+        className={`${portalCardClass} ${PORTAL_SECTION_ANCHOR_CLASS} flex flex-col gap-3 border-t border-white/10 pt-10`}
+      >
         <h2 className={portalSectionTitleClass}>Add subject</h2>
         <input
           className={formInputClassName}
@@ -226,8 +306,11 @@ export function ProfessorPanel() {
         </button>
       </section>
 
-      <section className={`${portalCardClass} flex flex-col gap-3`}>
-        <h2 className={portalSectionTitleClass}>Post grade</h2>
+      <section
+        id="post-grade"
+        className={`${portalCardClass} ${PORTAL_SECTION_ANCHOR_CLASS} flex flex-col gap-3 border-t border-white/10 pt-10`}
+      >
+        <h2 className={portalSectionTitleClass}>Post new grade</h2>
         <input
           className={formInputMonoClassName}
           placeholder="Student address 0x…"
@@ -261,7 +344,10 @@ export function ProfessorPanel() {
         </button>
       </section>
 
-      <section className={`${portalCardClass} flex flex-col gap-3`}>
+      <section
+        id="activity"
+        className={`${portalCardClass} ${PORTAL_SECTION_ANCHOR_CLASS} flex flex-col gap-3 border-t border-white/10 pt-10`}
+      >
         <h2 className={portalSectionTitleClass}>Subject activity</h2>
         <input
           className={formInputClassName}
@@ -284,9 +370,7 @@ export function ProfessorPanel() {
           {isPending ? "Processing…" : "Update activity"}
         </button>
       </section>
-
-      {message && <p className={messageBoxClass}>{message}</p>}
-      {localError && <TxErrorAlert message={localError} />}
-    </div>
+      </div>
+    </>
   );
 }
