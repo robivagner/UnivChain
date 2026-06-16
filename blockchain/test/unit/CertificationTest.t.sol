@@ -58,8 +58,6 @@ contract CertificationTest is Test {
 
         ICertification.Diploma memory diploma = certification.getDiploma(expectedTokenId);
         assertEq(diploma.documentHash, DOC_HASH);
-        assertEq(diploma.totalCredits, credits);
-        assertEq(diploma.finalAverage, avg);
         assertEq(diploma.issueTimestamp, block.timestamp);
         assertEq(diploma.issuer, issuer);
         assertFalse(diploma.revoked);
@@ -82,10 +80,44 @@ contract CertificationTest is Test {
         assertEq(certification.getDiploma(1).documentHash, bytes32(0));
     }
 
-    function test_RevertIfInvalidCredentialAnchor() public {
+    function test_IssueDiplomaPendingCredential() public {
+        vm.prank(core);
+        certification.issueDiploma(student, 180, 800, bytes32(0), "", issuer);
+
+        assertEq(certification.tokenURI(1), "");
+        assertEq(certification.getDiploma(1).metadataURI, "");
+    }
+
+    function test_AttachDiplomaCredentialSuccess() public {
+        vm.prank(core);
+        certification.issueDiploma(student, 180, 800, bytes32(0), "", issuer);
+
+        vm.prank(core);
+        certification.attachDiplomaCredential(1, DOC_HASH, META_URI);
+
+        ICertification.Diploma memory diploma = certification.getDiploma(1);
+        assertEq(diploma.documentHash, DOC_HASH);
+        assertEq(diploma.metadataURI, META_URI);
+        assertEq(certification.tokenURI(1), META_URI);
+    }
+
+    function test_RevertIfInvalidCredentialAnchorOnAttach() public {
+        vm.prank(core);
+        certification.issueDiploma(student, 180, 800, bytes32(0), "", issuer);
+
         vm.prank(core);
         vm.expectRevert(Certification.Certification__InvalidCredentialAnchor.selector);
-        certification.issueDiploma(student, 180, 800, DOC_HASH, "", issuer);
+        certification.attachDiplomaCredential(1, DOC_HASH, "");
+    }
+
+    function test_RevertIfCredentialAlreadyAttached() public {
+        _issueDefaultDiploma(student, 180, 800);
+
+        vm.prank(core);
+        vm.expectRevert(
+            abi.encodeWithSelector(Certification.Certification__CredentialAlreadyAttached.selector, 1)
+        );
+        certification.attachDiplomaCredential(1, DOC_HASH, META_URI);
     }
 
     function test_RevertIfIssuerAddressZero() public {
@@ -179,7 +211,7 @@ contract CertificationTest is Test {
     function test_SupportsInterfaceERC721andERC165() public view {
         assertTrue(certification.supportsInterface(type(IERC721).interfaceId));
         assertTrue(certification.supportsInterface(type(IERC165).interfaceId));
-        assertTrue(certification.supportsInterface(0xb45a3c0e));
+        assertTrue(certification.supportsInterface(type(IERC5192).interfaceId));
         assertFalse(certification.supportsInterface(0xffffffff));
     }
 
@@ -203,8 +235,6 @@ contract CertificationTest is Test {
         assertTrue(certification.isDiplomaValid(tokenId));
 
         ICertification.Diploma memory diploma = certification.getDiploma(tokenId);
-        assertEq(diploma.totalCredits, credits);
-        assertEq(diploma.finalAverage, avg);
         assertEq(diploma.documentHash, DOC_HASH);
         assertEq(diploma.issuer, issuer);
 

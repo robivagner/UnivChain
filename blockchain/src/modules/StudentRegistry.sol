@@ -14,7 +14,7 @@ contract StudentRegistry is IStudentRegistry {
     // Errors
     error StudentRegistry__NotCore(address sender);
     error StudentRegistry__AddressZero();
-    error StudentRegistry__InvalidTokenId(uint256 tokenId);
+    error StudentRegistry__InvalidStudentId(uint256 studentId);
     error StudentRegistry__StudentAlreadyEnrolled(address student);
     error StudentRegistry__StudentAlreadyGraduated(address student);
     error StudentRegistry__StudentIsExpelled(address student);
@@ -23,15 +23,15 @@ contract StudentRegistry is IStudentRegistry {
     // State variables
     IUniversityCore immutable i_coreContract;
 
-    uint256 public s_tokenIdCounter;
-    mapping(uint256 tokenId => Student) public s_students;
-    mapping(address student => uint256 tokenId) public s_studentToTokenId;
+    uint256 public s_studentIdCounter;
+    mapping(uint256 studentId => Student) public s_students;
+    mapping(address student => uint256 studentId) public s_studentToId;
     mapping(address student => bool isActive) public s_studentIsActive;
 
     // Events
-    event StudentEnrolled(address indexed student, uint256 indexed tokenId);
-    event StudentRevoked(address indexed student, uint256 indexed tokenId);
-    event StudentGraduated(address indexed student, uint256 indexed tokenId);
+    event StudentEnrolled(address indexed student, uint256 indexed studentId);
+    event StudentRevoked(address indexed student, uint256 indexed studentId);
+    event StudentGraduated(address indexed student, uint256 indexed studentId);
 
     // Modifiers
     modifier onlyCore() {
@@ -51,7 +51,7 @@ contract StudentRegistry is IStudentRegistry {
         }
 
         i_coreContract = IUniversityCore(coreContract);
-        s_tokenIdCounter = 1;
+        s_studentIdCounter = 1;
     }
 
     //////////////////////////////
@@ -62,11 +62,11 @@ contract StudentRegistry is IStudentRegistry {
     function enrollStudent(address student, bytes32 studentIdHash) external onlyCore {
         _assertCanEnroll(student);
 
-        uint256 tokenId = s_tokenIdCounter++;
-        s_studentToTokenId[student] = tokenId;
+        uint256 studentId = s_studentIdCounter++;
+        s_studentToId[student] = studentId;
         s_studentIsActive[student] = true;
 
-        s_students[tokenId] = Student({
+        s_students[studentId] = Student({
             studentIdHash: studentIdHash,
             registrationTimestamp: block.timestamp,
             graduationTimestamp: 0,
@@ -74,14 +74,14 @@ contract StudentRegistry is IStudentRegistry {
             isExpelled: false
         });
 
-        emit StudentEnrolled(student, tokenId);
+        emit StudentEnrolled(student, studentId);
     }
 
     /// @inheritdoc IStudentRegistry
     function graduateStudent(address student) external onlyCore {
-        uint256 tokenId = _requireActiveStudent(student);
+        uint256 studentId = _requireActiveStudent(student);
 
-        Student storage s = s_students[tokenId];
+        Student storage s = s_students[studentId];
         if (s.hasGraduated) {
             revert StudentRegistry__StudentAlreadyGraduated(student);
         }
@@ -89,21 +89,21 @@ contract StudentRegistry is IStudentRegistry {
         s.graduationTimestamp = block.timestamp;
         s_studentIsActive[student] = false;
 
-        emit StudentGraduated(student, tokenId);
+        emit StudentGraduated(student, studentId);
     }
 
     /// @inheritdoc IStudentRegistry
     function expellStudent(address student) external onlyCore {
-        uint256 tokenId = _requireActiveStudent(student);
+        uint256 studentId = _requireActiveStudent(student);
 
-        if (s_students[tokenId].isExpelled) {
+        if (s_students[studentId].isExpelled) {
             revert StudentRegistry__StudentIsExpelled(student);
         }
 
-        s_students[tokenId].isExpelled = true;
+        s_students[studentId].isExpelled = true;
         s_studentIsActive[student] = false;
 
-        emit StudentRevoked(student, tokenId);
+        emit StudentRevoked(student, studentId);
     }
 
     //////////////////////////////
@@ -111,17 +111,17 @@ contract StudentRegistry is IStudentRegistry {
     //////////////////////////////
 
     /// @inheritdoc IStudentRegistry
-    function getStudentMetadata(uint256 tokenId) external view returns (bytes32, uint256, uint256, bool, bool) {
-        if (tokenId == 0 || tokenId >= s_tokenIdCounter) {
-            revert StudentRegistry__InvalidTokenId(tokenId);
+    function getStudentMetadata(uint256 studentId) external view returns (bytes32, uint256, uint256, bool, bool) {
+        if (studentId == 0 || studentId >= s_studentIdCounter) {
+            revert StudentRegistry__InvalidStudentId(studentId);
         }
-        Student memory s = s_students[tokenId];
+        Student memory s = s_students[studentId];
         return (s.studentIdHash, s.registrationTimestamp, s.graduationTimestamp, s.hasGraduated, s.isExpelled);
     }
 
     /// @inheritdoc IStudentRegistry
-    function getStudentTokenId(address student) external view returns (uint256) {
-        return s_studentToTokenId[student];
+    function getStudentId(address student) external view returns (uint256) {
+        return s_studentToId[student];
     }
 
     /// @inheritdoc IStudentRegistry
@@ -136,20 +136,20 @@ contract StudentRegistry is IStudentRegistry {
 
     /// @inheritdoc IStudentRegistry
     function isStudentExpelled(address student) external view returns (bool) {
-        uint256 tokenId = s_studentToTokenId[student];
-        if (tokenId == 0) {
+        uint256 studentId = s_studentToId[student];
+        if (studentId == 0) {
             return false;
         }
-        return s_students[tokenId].isExpelled;
+        return s_students[studentId].isExpelled;
     }
 
     /// @inheritdoc IStudentRegistry
     function hasStudentGraduated(address student) external view returns (bool) {
-        uint256 tokenId = s_studentToTokenId[student];
-        if (tokenId == 0) {
+        uint256 studentId = s_studentToId[student];
+        if (studentId == 0) {
             return false;
         }
-        return s_students[tokenId].hasGraduated;
+        return s_students[studentId].hasGraduated;
     }
 
     /////////////////////////////////
@@ -161,7 +161,7 @@ contract StudentRegistry is IStudentRegistry {
             revert StudentRegistry__StudentAlreadyEnrolled(student);
         }
 
-        uint256 existingId = s_studentToTokenId[student];
+        uint256 existingId = s_studentToId[student];
         if (existingId == 0) {
             return;
         }
@@ -175,9 +175,9 @@ contract StudentRegistry is IStudentRegistry {
         }
     }
 
-    function _requireActiveStudent(address student) private view returns (uint256 tokenId) {
-        tokenId = s_studentToTokenId[student];
-        if (tokenId == 0 || !s_studentIsActive[student]) {
+    function _requireActiveStudent(address student) private view returns (uint256 studentId) {
+        studentId = s_studentToId[student];
+        if (studentId == 0 || !s_studentIsActive[student]) {
             revert StudentRegistry__StudentNotEnrolled(student);
         }
     }

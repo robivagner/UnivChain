@@ -99,8 +99,10 @@ export async function verifyDiplomaByTokenId(
       tokenId,
       degreeTitle: credential?.degreeTitle,
       major: credential?.major,
-      finalAverageDisplay: (Number(diploma.finalAverage) / 100).toFixed(2),
-      totalCredits: diploma.totalCredits,
+      finalAverageDisplay: credential
+        ? (Number(credential.finalAverage) / 100).toFixed(2)
+        : undefined,
+      totalCredits: credential ? BigInt(credential.totalCredits) : undefined,
       documentHash: diploma.documentHash,
       metadataURI: diploma.metadataURI,
       metadataHashMatch,

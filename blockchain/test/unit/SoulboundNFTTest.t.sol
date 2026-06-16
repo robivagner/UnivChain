@@ -22,14 +22,12 @@ contract SoulboundNFTTest is Test {
     address public holder = makeAddr("holder");
     address public other = makeAddr("other");
 
-    bytes4 internal constant INTERFACE_ID_ERC5192 = 0xb45a3c0e;
-
     function setUp() public {
         token = new SoulboundNFTHarness();
     }
 
     function test_SupportsInterfaceERC5192() public view {
-        assertTrue(token.supportsInterface(INTERFACE_ID_ERC5192));
+        assertTrue(token.supportsInterface(type(IERC5192).interfaceId));
         assertFalse(token.supportsInterface(0xffffffff));
     }
 

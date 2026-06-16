@@ -11,6 +11,8 @@ export const DIPLOMA_EIP712_TYPES = {
     { name: "major", type: "string" },
     { name: "facultyName", type: "string" },
     { name: "validFrom", type: "string" },
+    { name: "totalCredits", type: "uint256" },
+    { name: "finalAverage", type: "uint256" },
     { name: "chainId", type: "uint256" },
     { name: "certificationContract", type: "address" },
     { name: "studentIdHash", type: "bytes32" },
@@ -39,6 +41,8 @@ export function buildSignableFields(input: {
   chainId: number;
   certificationContract: `0x${string}`;
   studentIdHash?: `0x${string}` | null;
+  totalCredits: bigint;
+  finalAverage: bigint;
 }): DiplomaSignableFields {
   return {
     version: DIPLOMA_CREDENTIAL_VERSION,
@@ -51,5 +55,7 @@ export function buildSignableFields(input: {
     chainId: BigInt(input.chainId),
     certificationContract: input.certificationContract,
     studentIdHash: input.studentIdHash ?? ("0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`),
+    totalCredits: input.totalCredits,
+    finalAverage: input.finalAverage,
   };
 }

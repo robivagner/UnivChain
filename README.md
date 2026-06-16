@@ -239,7 +239,7 @@ Switch MetaMask to the **Anvil** network before using the app.
 ### 1. Student — request enrollment
 
 1. Connect wallet (e.g. Anvil account **#1**).
-2. Go to **Enroll** (`/enroll`).
+2. Go to **Student** (`/pages/student`).
 3. Click **Get Mock USDC (test)** — mints test tokens for the registration fee.
 4. Submit **Request enrollment** (approves + pays fee to the protocol).
 5. Status becomes “pending” until an admin accepts.
@@ -247,7 +247,7 @@ Switch MetaMask to the **Anvil** network before using the app.
 ### 2. Admin — accept enrollment & grant roles
 
 1. Connect wallet as account **#0** (deployer has `ADMIN_ROLE`).
-2. Open **Admin** (`/admin`).
+2. Open **Admin** (`/pages/admin`).
 3. **Pending enrollments** — loaded via indexer; accept or reject (reject refunds the fee).
 4. On accept, provide a **matriculation hash** (e.g. `keccak256` of a student ID string).
 5. **Grant roles:**
@@ -257,7 +257,7 @@ Switch MetaMask to the **Anvil** network before using the app.
 ### 3. Professor — subjects & grades
 
 1. Connect as the professor wallet.
-2. Open **Professor** (`/professor`).
+2. Open **Professor** (`/pages/professor`).
 3. Create subjects (or admin assigns subjects to professors).
 4. Post **final grades** (1–10) for enrolled students.
 
@@ -266,7 +266,7 @@ Graduation requires enough **ECTS credits** and minimum **weighted average** (de
 ### 4. Diploma issuer — sign & mint diploma
 
 1. Connect as a wallet with `DIPLOMA_ISSUER_ROLE`.
-2. Open **Issuer** (`/issuer`).
+2. Open **Issuer** (`/pages/issuer`).
 3. Enter student address; confirm eligibility (credits + average).
 4. **Sign credential (EIP-712)** — builds [`univchain-diploma-1`](frontend/src/lib/diploma/README.md) JSON.
 5. **Download** `credential.json`, pin to IPFS (or host over HTTPS).
@@ -276,13 +276,13 @@ See [`frontend/src/lib/diploma/README.md`](frontend/src/lib/diploma/README.md) f
 
 ### 5. Verifier — check a diploma
 
-1. Open **Verify** (`/verify`).
+1. Open **Verify** (`/pages/verify`).
 2. Enter student address and/or diploma **token ID**.
 3. The app checks on-chain validity, EIP-712 signature, and document hash when JSON is reachable.
 
 ### 6. Student — after graduation
 
-Graduated students see their diploma summary and credential link on **Student portal** (`/student`).
+Graduated students see their diploma summary and credential link on **Student portal** (`/pages/student`).
 
 ---
 

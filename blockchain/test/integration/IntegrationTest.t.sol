@@ -68,6 +68,13 @@ contract IntegrationTest is Test {
         vm.stopPrank();
     }
 
+    function _graduateAndAttach(address who, address iss) internal {
+        vm.startPrank(iss);
+        core.graduateStudentAndIssueDiploma(who);
+        core.attachDiplomaCredential(who, DIPLOMA_DOC_HASH, DIPLOMA_META_URI);
+        vm.stopPrank();
+    }
+
     function testFuzz_FullAcademicCycle(
         uint8 rawGrade,
         address studentFuzz,
@@ -114,8 +121,7 @@ contract IntegrationTest is Test {
         assertEq(gradebook.getStudentCredits(studentFuzz), CREDITS_REQUIRED);
 
         // Step 6: Issuer Finalizes Studies
-        vm.prank(issuerFuzz);
-        core.graduateStudentAndIssueDiploma(studentFuzz, DIPLOMA_DOC_HASH, DIPLOMA_META_URI);
+        _graduateAndAttach(studentFuzz, issuerFuzz);
 
         // Assertions: enrollment closed, diploma minted
         assertFalse(registry.isStudentEnrolled(studentFuzz));
@@ -126,8 +132,8 @@ contract IntegrationTest is Test {
         uint256 tokenId = certification.getDiplomaIdForStudent(studentFuzz);
         ICertification.Diploma memory diploma = certification.getDiploma(tokenId);
 
-        assertEq(diploma.finalAverage, uint256(grade) * 100);
-        assertEq(diploma.totalCredits, CREDITS_REQUIRED);
+        assertEq(gradebook.getWeightedAverage(studentFuzz), uint256(grade) * 100);
+        assertEq(gradebook.getStudentCredits(studentFuzz), CREDITS_REQUIRED);
         assertEq(diploma.issueTimestamp, block.timestamp);
         assertTrue(certification.isDiplomaValid(tokenId));
         assertEq(certification.tokenURI(tokenId), DIPLOMA_META_URI);
@@ -257,14 +263,13 @@ contract IntegrationTest is Test {
 
         _completeCurriculumForGraduation(student, professor, 10);
 
-        vm.prank(issuer);
-        core.graduateStudentAndIssueDiploma(student, DIPLOMA_DOC_HASH, DIPLOMA_META_URI);
+        _graduateAndAttach(student, issuer);
 
         vm.prank(issuer);
         vm.expectRevert(
             abi.encodeWithSelector(UniversityCore.UniversityCore__StudentHasAlreadyGraduated.selector, student)
         );
-        core.graduateStudentAndIssueDiploma(student, DIPLOMA_DOC_HASH, DIPLOMA_META_URI);
+        core.graduateStudentAndIssueDiploma(student);
     }
 
     function test_AdminRevokeDiplomaThroughCore() public {
@@ -279,8 +284,7 @@ contract IntegrationTest is Test {
 
         _completeCurriculumForGraduation(student, professor, 10);
 
-        vm.prank(issuer);
-        core.graduateStudentAndIssueDiploma(student, DIPLOMA_DOC_HASH, DIPLOMA_META_URI);
+        _graduateAndAttach(student, issuer);
 
         uint256 tokenId = certification.getDiplomaIdForStudent(student);
         assertTrue(certification.isDiplomaValid(tokenId));
@@ -317,7 +321,7 @@ contract IntegrationTest is Test {
                 Certification.Certification__NotEnoughCredits.selector, student, uint256(SUBJECT_ECTS)
             )
         );
-        core.graduateStudentAndIssueDiploma(student, DIPLOMA_DOC_HASH, DIPLOMA_META_URI);
+        core.graduateStudentAndIssueDiploma(student);
 
         assertTrue(registry.isStudentEnrolled(student));
         assertFalse(registry.hasStudentGraduated(student));
@@ -345,7 +349,7 @@ contract IntegrationTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(UniversityCore.UniversityCore__OutstandingStudentDebt.selector, student)
         );
-        core.graduateStudentAndIssueDiploma(student, DIPLOMA_DOC_HASH, DIPLOMA_META_URI);
+        core.graduateStudentAndIssueDiploma(student);
     }
 
     function test_GraduationAfterStudentDebtPaid() public {
@@ -378,8 +382,7 @@ contract IntegrationTest is Test {
 
         assertEq(feeManager.getStudentDebtOwed(student, address(mockToken)), 0);
 
-        vm.prank(issuer);
-        core.graduateStudentAndIssueDiploma(student, DIPLOMA_DOC_HASH, DIPLOMA_META_URI);
+        _graduateAndAttach(student, issuer);
 
         assertTrue(registry.hasStudentGraduated(student));
     }
@@ -412,8 +415,7 @@ contract IntegrationTest is Test {
         core.payStudentDebt(address(mockToken), owed);
         vm.stopPrank();
 
-        vm.prank(issuer);
-        core.graduateStudentAndIssueDiploma(student, DIPLOMA_DOC_HASH, DIPLOMA_META_URI);
+        _graduateAndAttach(student, issuer);
 
         assertTrue(registry.hasStudentGraduated(student));
     }

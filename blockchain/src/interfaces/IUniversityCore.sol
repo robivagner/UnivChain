@@ -95,11 +95,15 @@ interface IUniversityCore {
     /// @param isActive Boolean indicating whether grading is currently open for this subject.
     function setSubjectActivity(uint256 subjectId, bool isActive) external;
 
-    /// @notice Gateway function to finalize a student's studies and issue their degree.
-    /// @dev Can only be called by a Diploma Issuer. Mints the diploma SBT then burns the identity SBT.
-    /// @param documentHash Optional keccak256 of canonical UTF-8 JSON bytes (0 if relying on IPFS CID alone).
+    /// @notice Gateway function to finalize a student's studies and mint their diploma SBT.
+    /// @dev Can only be called by a Diploma Issuer. Reads Gradebook snapshot at mint time.
+    ///      Off-chain JSON is signed and attached afterward via `attachDiplomaCredential`.
+    function graduateStudentAndIssueDiploma(address student) external;
+
+    /// @notice Links pinned credential JSON to an already minted diploma.
+    /// @param documentHash keccak256 of canonical UTF-8 JSON bytes (0 if relying on IPFS CID alone).
     /// @param metadataURI ERC-721 metadata URI (IPFS/HTTPS JSON) describing the credential.
-    function graduateStudentAndIssueDiploma(
+    function attachDiplomaCredential(
         address student,
         bytes32 documentHash,
         string calldata metadataURI

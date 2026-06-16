@@ -1,10 +1,16 @@
 import { keccak256, stringToBytes } from "viem";
 import {
   DIPLOMA_CREDENTIAL_VERSION,
+  DIPLOMA_PROOF_TYPE,
+  LEGACY_DIPLOMA_PROOF_TYPE,
   ZERO_BYTES32,
   type DiplomaSignableFields,
   type UnivChainDiplomaCredential,
 } from "./types";
+
+function isAcceptedProofType(value: unknown): boolean {
+  return value === DIPLOMA_PROOF_TYPE || value === LEGACY_DIPLOMA_PROOF_TYPE;
+}
 
 export function isUnivChainDiplomaCredential(value: unknown): value is UnivChainDiplomaCredential {
   if (!value || typeof value !== "object") return false;
@@ -15,6 +21,9 @@ export function isUnivChainDiplomaCredential(value: unknown): value is UnivChain
     typeof c.student === "string" &&
     typeof c.degreeTitle === "string" &&
     typeof c.major === "string" &&
+    typeof c.totalCredits === "number" &&
+    typeof c.finalAverage === "number" &&
+    isAcceptedProofType(c.proof?.type) &&
     typeof c.proof?.proofValue === "string"
   );
 }
@@ -49,6 +58,8 @@ export function buildCredentialDraft(input: {
   chainId: number;
   certificationContract: `0x${string}`;
   studentIdHash?: `0x${string}` | null;
+  totalCredits: bigint;
+  finalAverage: bigint;
   proofValue: `0x${string}`;
 }): UnivChainDiplomaCredential {
   const base: UnivChainDiplomaCredential = {
@@ -59,6 +70,8 @@ export function buildCredentialDraft(input: {
     major: input.major,
     facultyName: input.facultyName,
     validFrom: input.validFrom,
+    totalCredits: Number(input.totalCredits),
+    finalAverage: Number(input.finalAverage),
     ...(input.studentIdHash && input.studentIdHash !== ZERO_BYTES32
       ? { studentIdHash: input.studentIdHash }
       : {}),
@@ -68,7 +81,7 @@ export function buildCredentialDraft(input: {
       documentHash: ZERO_BYTES32,
     },
     proof: {
-      type: "Eip712Signature2021",
+      type: DIPLOMA_PROOF_TYPE,
       proofValue: input.proofValue,
     },
   };
@@ -97,6 +110,8 @@ export function credentialToSignableFields(
     chainId: BigInt(credential.evidence.chainId),
     certificationContract: credential.evidence.certificationContract,
     studentIdHash: credential.studentIdHash ?? ZERO_BYTES32,
+    totalCredits: BigInt(credential.totalCredits),
+    finalAverage: BigInt(credential.finalAverage),
   };
 }
 

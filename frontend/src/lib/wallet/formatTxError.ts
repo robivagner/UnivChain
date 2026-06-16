@@ -30,6 +30,8 @@ const FRIENDLY_REVERTS: Record<string, string> = {
   Certification__AverageTooLow: "The student's average is below the graduation minimum.",
   Certification__DiplomaDoesNotExist: "That diploma token ID does not exist.",
   Certification__DiplomaAlreadyRevoked: "That diploma has already been revoked.",
+  Certification__InvalidCredentialAnchor: "Metadata URI is required when attaching a credential.",
+  Certification__CredentialAlreadyAttached: "This diploma already has credential metadata attached.",
   FeeManager__NotEnoughFunds: "Treasury does not hold enough tokens for this withdrawal.",
   FeeManager__TokenNotAllowed: "This token is not configured for enrollment fees.",
   FeeManager__FeeNotPaid: "No enrollment fee was paid for that student.",

@@ -17,7 +17,7 @@ export const StudentRegistryABI = [
     name: "StudentEnrolled",
     inputs: [
       { name: "student", type: "address", indexed: true },
-      { name: "tokenId", type: "uint256", indexed: true },
+      { name: "studentId", type: "uint256", indexed: true },
     ],
   },
   {

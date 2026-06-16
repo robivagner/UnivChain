@@ -35,13 +35,13 @@ contract StudentRegistryTest is Test {
         vm.prank(core);
         registry.enrollStudent(student, STUDENT_ID_HASH);
 
-        uint256 tokenId = registry.getStudentTokenId(student);
-        assertEq(tokenId, 1);
+        uint256 studentId = registry.getStudentId(student);
+        assertEq(studentId, 1);
         assertTrue(registry.isStudentEnrolled(student));
         assertTrue(registry.s_studentIsActive(student));
 
         (bytes32 hash, uint256 regTimestamp, uint256 gradTimestamp, bool hasGraduated, bool isExpelled) =
-            registry.getStudentMetadata(tokenId);
+            registry.getStudentMetadata(studentId);
 
         assertEq(hash, STUDENT_ID_HASH);
         assertEq(regTimestamp, block.timestamp);
@@ -56,8 +56,8 @@ contract StudentRegistryTest is Test {
         registry.enrollStudent(student, STUDENT_ID_HASH);
     }
 
-    function test_RevertGetStudentMetadataInvalidTokenId() public {
-        vm.expectRevert(abi.encodeWithSelector(StudentRegistry.StudentRegistry__InvalidTokenId.selector, 0));
+    function test_RevertGetStudentMetadataInvalidStudentId() public {
+        vm.expectRevert(abi.encodeWithSelector(StudentRegistry.StudentRegistry__InvalidStudentId.selector, 0));
         registry.getStudentMetadata(0);
     }
 
@@ -68,7 +68,7 @@ contract StudentRegistryTest is Test {
     function test_GraduateStudentSuccess() public {
         vm.startPrank(core);
         registry.enrollStudent(student, STUDENT_ID_HASH);
-        uint256 tokenId = registry.getStudentTokenId(student);
+        uint256 studentId = registry.getStudentId(student);
 
         skip(365 days);
         uint256 gradTime = block.timestamp;
@@ -80,7 +80,7 @@ contract StudentRegistryTest is Test {
         assertFalse(registry.s_studentIsActive(student));
         assertTrue(registry.hasStudentGraduated(student));
 
-        (,, uint256 gradTimestamp, bool hasGraduated, bool isExpelled) = registry.getStudentMetadata(tokenId);
+        (,, uint256 gradTimestamp, bool hasGraduated, bool isExpelled) = registry.getStudentMetadata(studentId);
 
         assertEq(gradTimestamp, gradTime);
         assertTrue(hasGraduated);
@@ -128,7 +128,7 @@ contract StudentRegistryTest is Test {
     function test_ExpellStudentSuccess() public {
         vm.startPrank(core);
         registry.enrollStudent(student, STUDENT_ID_HASH);
-        uint256 tokenId = registry.getStudentTokenId(student);
+        uint256 studentId = registry.getStudentId(student);
 
         registry.expellStudent(student);
         vm.stopPrank();
@@ -136,7 +136,7 @@ contract StudentRegistryTest is Test {
         assertFalse(registry.isStudentEnrolled(student));
         assertTrue(registry.isStudentExpelled(student));
 
-        (,,,, bool isExpelled) = registry.getStudentMetadata(tokenId);
+        (,,,, bool isExpelled) = registry.getStudentMetadata(studentId);
         assertTrue(isExpelled);
     }
 
@@ -185,7 +185,7 @@ contract StudentRegistryTest is Test {
 
         vm.startPrank(core);
         registry.enrollStudent(randomStudent, randomHash);
-        uint256 tokenId = registry.getStudentTokenId(randomStudent);
+        uint256 studentId = registry.getStudentId(randomStudent);
 
         assertTrue(registry.isStudentEnrolled(randomStudent));
 
@@ -204,7 +204,7 @@ contract StudentRegistryTest is Test {
             assertFalse(registry.isStudentEnrolled(randomStudent));
             assertFalse(registry.isStudentExpelled(randomStudent));
 
-            (,, uint256 gradTimestamp,,) = registry.getStudentMetadata(tokenId);
+            (,, uint256 gradTimestamp,,) = registry.getStudentMetadata(studentId);
             assertEq(gradTimestamp, block.timestamp);
         }
         vm.stopPrank();

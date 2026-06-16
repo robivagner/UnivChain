@@ -11,6 +11,7 @@ import { useMounted } from "@/lib/useMounted";
 import { useNavPrefetch } from "@/lib/navigation/useNavPrefetch";
 import { PortalNavLink } from "@/components/layout/PortalNavLink";
 import { UnivChainLogo } from "@/components/ui/UnivChainLogo";
+import { pages } from "@/lib/navigation/routes";
 
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -34,35 +35,35 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     <div className="portal-shell-bg min-h-screen flex flex-col">
       <header className="sticky top-0 z-20 border-b border-white/10 bg-[rgba(6,9,18,0.72)] backdrop-blur-xl">
         <div className="max-w-6xl mx-auto px-4 py-3.5 flex items-center justify-between gap-4">
-          <Link href="/" prefetch className="shrink-0 transition-opacity hover:opacity-90">
+          <Link href={pages.home} prefetch className="shrink-0 transition-opacity hover:opacity-90">
             <UnivChainLogo size="sm" />
           </Link>
 
           <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-3">
             <nav className="flex flex-wrap items-center justify-end gap-1">
-              <PortalNavLink href="/" active={pathname === "/"}>
+              <PortalNavLink href={pages.home} active={pathname === pages.home}>
                 Home
               </PortalNavLink>
-              <PortalNavLink href="/verify" active={pathname === "/verify"}>
+              <PortalNavLink href={pages.verify} active={pathname === pages.verify}>
                 Verify
               </PortalNavLink>
               {mounted && isConnected && (
-                <PortalNavLink href="/enroll" active={pathname === "/enroll"}>
+                <PortalNavLink href={pages.student} active={pathname === pages.student}>
                   Student
                 </PortalNavLink>
               )}
               {mounted && isConnected && !rolesLoading && isProfessor && (
-                <PortalNavLink href="/professor" active={pathname.startsWith("/professor")}>
+                <PortalNavLink href={pages.professor} active={pathname.startsWith(pages.professor)}>
                   Professor
                 </PortalNavLink>
               )}
               {mounted && isConnected && !rolesLoading && isIssuer && (
-                <PortalNavLink href="/issuer" active={pathname.startsWith("/issuer")}>
+                <PortalNavLink href={pages.issuer} active={pathname.startsWith(pages.issuer)}>
                   Issuer
                 </PortalNavLink>
               )}
               {mounted && isConnected && !rolesLoading && isAdmin && (
-                <PortalNavLink href="/admin" active={pathname.startsWith("/admin")}>
+                <PortalNavLink href={pages.admin} active={pathname.startsWith(pages.admin)}>
                   Admin
                 </PortalNavLink>
               )}

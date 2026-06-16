@@ -6,6 +6,8 @@
   "major": "Computer Science",
   "facultyName": "Faculty of Computer Science",
   "validFrom": "2026-06-02T12:00:00Z",
+  "totalCredits": 180,
+  "finalAverage": 950,
   "studentIdHash": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
   "evidence": {
     "chainId": 31337,
@@ -13,7 +15,7 @@
     "documentHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
   },
   "proof": {
-    "type": "Eip712Signature2021",
+    "type": "Eip712Signature",
     "proofValue": "0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
   }
 }

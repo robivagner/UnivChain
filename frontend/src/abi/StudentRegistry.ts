@@ -43,10 +43,29 @@ export const StudentRegistryABI = [
   },
   {
     "type": "function",
+    "name": "getStudentId",
+    "inputs": [
+      {
+        "name": "student",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getStudentMetadata",
     "inputs": [
       {
-        "name": "tokenId",
+        "name": "studentId",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -76,25 +95,6 @@ export const StudentRegistryABI = [
         "name": "",
         "type": "bool",
         "internalType": "bool"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getStudentTokenId",
-    "inputs": [
-      {
-        "name": "student",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -184,6 +184,19 @@ export const StudentRegistryABI = [
   },
   {
     "type": "function",
+    "name": "s_studentIdCounter",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "s_studentIsActive",
     "inputs": [
       {
@@ -203,7 +216,7 @@ export const StudentRegistryABI = [
   },
   {
     "type": "function",
-    "name": "s_studentToTokenId",
+    "name": "s_studentToId",
     "inputs": [
       {
         "name": "student",
@@ -213,7 +226,7 @@ export const StudentRegistryABI = [
     ],
     "outputs": [
       {
-        "name": "tokenId",
+        "name": "studentId",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -225,7 +238,7 @@ export const StudentRegistryABI = [
     "name": "s_students",
     "inputs": [
       {
-        "name": "tokenId",
+        "name": "studentId",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -260,19 +273,6 @@ export const StudentRegistryABI = [
     "stateMutability": "view"
   },
   {
-    "type": "function",
-    "name": "s_tokenIdCounter",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
     "type": "event",
     "name": "StudentEnrolled",
     "inputs": [
@@ -283,7 +283,7 @@ export const StudentRegistryABI = [
         "internalType": "address"
       },
       {
-        "name": "tokenId",
+        "name": "studentId",
         "type": "uint256",
         "indexed": true,
         "internalType": "uint256"
@@ -302,7 +302,7 @@ export const StudentRegistryABI = [
         "internalType": "address"
       },
       {
-        "name": "tokenId",
+        "name": "studentId",
         "type": "uint256",
         "indexed": true,
         "internalType": "uint256"
@@ -321,7 +321,7 @@ export const StudentRegistryABI = [
         "internalType": "address"
       },
       {
-        "name": "tokenId",
+        "name": "studentId",
         "type": "uint256",
         "indexed": true,
         "internalType": "uint256"
@@ -336,10 +336,10 @@ export const StudentRegistryABI = [
   },
   {
     "type": "error",
-    "name": "StudentRegistry__InvalidTokenId",
+    "name": "StudentRegistry__InvalidStudentId",
     "inputs": [
       {
-        "name": "tokenId",
+        "name": "studentId",
         "type": "uint256",
         "internalType": "uint256"
       }

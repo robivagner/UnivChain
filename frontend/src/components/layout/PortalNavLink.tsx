@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { prefetchPortalRoute } from "@/lib/navigation/prefetchPortalRoutes";
+import type { PagesRoute } from "@/lib/navigation/routes";
 
 type Props = {
-  href: string;
+  href: PagesRoute;
   active: boolean;
   children: React.ReactNode;
 };

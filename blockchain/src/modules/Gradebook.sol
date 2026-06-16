@@ -17,7 +17,7 @@ contract Gradebook is IGradebook {
     error Gradebook__SubjectNotActive(uint256 subjectId);
     error Gradebook__NotProfessorOfSubject(address wrongProfessor, uint256 subjectId);
     error Gradebook__GradeOutOfBounds(uint256 grade);
-    error Gradebook__SubjectIdOutOfBounds(uint256 subjectId, uint256 upperBound);
+    error Gradebook__SubjectIdOutOfBounds(uint256 subjectId, uint256 subjectIdCounter);
     error Gradebook__CreditsOutOfBounds(uint8 credits);
     error Gradebook__SubjectNameEmpty();
 
@@ -29,7 +29,7 @@ contract Gradebook is IGradebook {
 
     IUniversityCore immutable i_coreContract;
 
-    uint256 public s_tokenIdCounter;
+    uint256 public s_subjectIdCounter;
     mapping(uint256 subjectId => Subject) public s_subjects;
     mapping(address student => mapping(uint256 subjectId => GradeRecord)) public s_studentGrades;
     mapping(address student => uint256 credits) public s_studentCredits;
@@ -58,7 +58,7 @@ contract Gradebook is IGradebook {
         }
 
         i_coreContract = IUniversityCore(coreContract);
-        s_tokenIdCounter = 1;
+        s_subjectIdCounter = 1;
     }
 
     //////////////////////////////
@@ -77,7 +77,7 @@ contract Gradebook is IGradebook {
             revert Gradebook__AddressZero();
         }
 
-        uint256 subjectId = s_tokenIdCounter++;
+        uint256 subjectId = s_subjectIdCounter++;
         s_subjects[subjectId] = Subject({name: name, credits: credits, professor: professor, isActive: true});
         emit SubjectAdded(subjectId, name, credits);
     }
@@ -111,8 +111,8 @@ contract Gradebook is IGradebook {
 
     /// @inheritdoc IGradebook
     function setSubjectActivity(address professor, uint256 subjectId, bool isActive) external onlyCore {
-        if (subjectId >= s_tokenIdCounter) {
-            revert Gradebook__SubjectIdOutOfBounds(subjectId, s_tokenIdCounter);
+        if (subjectId >= s_subjectIdCounter) {
+            revert Gradebook__SubjectIdOutOfBounds(subjectId, s_subjectIdCounter);
         }
 
         Subject storage subject = s_subjects[subjectId];
@@ -131,8 +131,8 @@ contract Gradebook is IGradebook {
 
     /// @inheritdoc IGradebook
     function getSubjectMetadata(uint256 subjectId) external view returns (string memory, uint8, address, bool) {
-        if (subjectId >= s_tokenIdCounter) {
-            revert Gradebook__SubjectIdOutOfBounds(subjectId, s_tokenIdCounter);
+        if (subjectId >= s_subjectIdCounter) {
+            revert Gradebook__SubjectIdOutOfBounds(subjectId, s_subjectIdCounter);
         }
 
         Subject memory subject = s_subjects[subjectId];
@@ -201,8 +201,8 @@ contract Gradebook is IGradebook {
         internal
         view
     {
-        if (subjectId >= s_tokenIdCounter) {
-            revert Gradebook__SubjectIdOutOfBounds(subjectId, s_tokenIdCounter);
+        if (subjectId >= s_subjectIdCounter) {
+            revert Gradebook__SubjectIdOutOfBounds(subjectId, s_subjectIdCounter);
         }
         if (professor != subject.professor) {
             revert Gradebook__NotProfessorOfSubject(professor, subjectId);

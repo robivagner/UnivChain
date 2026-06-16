@@ -31,13 +31,13 @@ interface IStudentRegistry {
     function expellStudent(address student) external;
 
     /// @notice Fetches the full metadata record of a student by their record ID.
-    /// @param tokenId The sequential student record identifier.
+    /// @param studentId The sequential student record identifier.
     /// @return studentIdHash The hashed matriculation number.
     /// @return registrationTimestamp The block timestamp of enrollment.
     /// @return graduationTimestamp The block timestamp of graduation (0 if not graduated).
     /// @return hasGraduated Boolean indicating graduation status.
     /// @return isExpelled Boolean indicating expulsion status.
-    function getStudentMetadata(uint256 tokenId)
+    function getStudentMetadata(uint256 studentId)
         external
         view
         returns (
@@ -69,6 +69,6 @@ interface IStudentRegistry {
 
     /// @notice Retrieves the sequential record ID associated with a student address.
     /// @param student The wallet address of the student.
-    /// @return tokenId The student record identifier (0 if never registered).
-    function getStudentTokenId(address student) external view returns (uint256 tokenId);
+    /// @return studentId The student record identifier (0 if never registered).
+    function getStudentId(address student) external view returns (uint256 studentId);
 }

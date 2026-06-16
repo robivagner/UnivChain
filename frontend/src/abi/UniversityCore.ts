@@ -195,6 +195,29 @@ export const UniversityCoreABI = [
   },
   {
     "type": "function",
+    "name": "attachDiplomaCredential",
+    "inputs": [
+      {
+        "name": "student",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "documentHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "metadataURI",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "configureToken",
     "inputs": [
       {
@@ -313,16 +336,6 @@ export const UniversityCoreABI = [
         "name": "student",
         "type": "address",
         "internalType": "address"
-      },
-      {
-        "name": "documentHash",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      },
-      {
-        "name": "metadataURI",
-        "type": "string",
-        "internalType": "string"
       }
     ],
     "outputs": [],

@@ -13,6 +13,7 @@ import {IGradebook} from "../interfaces/IGradebook.sol";
 import {ICertification} from "../interfaces/ICertification.sol";
 import {IStudentRegistry} from "../interfaces/IStudentRegistry.sol";
 import {IFeeManager} from "../interfaces/IFeeManager.sol";
+import {IERC5192} from "../interfaces/IERC5192.sol";
 
 /**
  * @title UniversityCore
@@ -46,9 +47,6 @@ contract UniversityCore is IUniversityCore, AccessControl {
     bytes32 public constant PROFESSOR_ROLE = keccak256("PROFESSOR_ROLE");
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant DIPLOMA_ISSUER_ROLE = keccak256("DIPLOMA_ISSUER_ROLE");
-
-    /// @dev EIP-5192 interface id per https://eips.ethereum.org/EIPS/eip-5192
-    bytes4 private constant INTERFACE_ID_ERC5192 = 0xb45a3c0e;
 
     string public s_facultyName;
     IStudentRegistry public s_studentRegistry;
@@ -287,23 +285,31 @@ contract UniversityCore is IUniversityCore, AccessControl {
     /////////////////////////////////////////////
 
     /// @inheritdoc IUniversityCore
-    function graduateStudentAndIssueDiploma(
-        address student,
-        bytes32 documentHash,
-        string calldata metadataURI
-    ) external onlyRole(DIPLOMA_ISSUER_ROLE) coreInitialized {
+    function graduateStudentAndIssueDiploma(address student)
+        external
+        onlyRole(DIPLOMA_ISSUER_ROLE)
+        coreInitialized
+    {
         _assertEligibleForGraduation(student);
 
         uint256 credits = s_gradebook.getStudentCredits(student);
         uint256 weightedAverage = s_gradebook.getWeightedAverage(student);
 
-        s_certification.issueDiploma(
-            student, credits, weightedAverage, documentHash, metadataURI, msg.sender
-        );
-        uint256 diplomaTokenId = s_certification.getDiplomaIdForStudent(student);
+        s_certification.issueDiploma(student, credits, weightedAverage, bytes32(0), "", msg.sender);
         s_studentRegistry.graduateStudent(student);
 
+        uint256 diplomaTokenId = s_certification.getDiplomaIdForStudent(student);
         emit StudentGraduated(student, diplomaTokenId);
+    }
+
+    /// @inheritdoc IUniversityCore
+    function attachDiplomaCredential(
+        address student,
+        bytes32 documentHash,
+        string calldata metadataURI
+    ) external onlyRole(DIPLOMA_ISSUER_ROLE) coreInitialized {
+        uint256 tokenId = s_certification.getDiplomaIdForStudent(student);
+        s_certification.attachDiplomaCredential(tokenId, documentHash, metadataURI);
     }
 
     /// @inheritdoc IUniversityCore
@@ -389,7 +395,7 @@ contract UniversityCore is IUniversityCore, AccessControl {
         if (!IERC165(module).supportsInterface(type(IERC721).interfaceId)) {
             revert UniversityCore__ContractDoesNotSupportIERC721(module);
         }
-        if (!IERC165(module).supportsInterface(INTERFACE_ID_ERC5192)) {
+        if (!IERC165(module).supportsInterface(type(IERC5192).interfaceId)) {
             revert UniversityCore__ContractDoesNotSupportIERC5192(module);
         }
     }

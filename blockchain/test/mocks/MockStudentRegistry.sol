@@ -7,7 +7,7 @@ contract MockStudentRegistry is IStudentRegistry {
     mapping(address => bool) private s_enrolled;
     mapping(address => bool) private s_graduated;
     mapping(address => bool) private s_expelled;
-    mapping(address => uint256) private s_tokenIds;
+    mapping(address => uint256) private s_studentIds;
 
     function isStudentEnrolled(address student) external view returns (bool) {
         return s_enrolled[student];
@@ -21,8 +21,8 @@ contract MockStudentRegistry is IStudentRegistry {
         return s_expelled[student];
     }
 
-    function getStudentTokenId(address student) external view returns (uint256) {
-        return s_tokenIds[student];
+    function getStudentId(address student) external view returns (uint256) {
+        return s_studentIds[student];
     }
 
     function enrollStudent(address student, bytes32) external {

@@ -21,6 +21,7 @@ contract Certification is ICertification, SoulboundNFT {
     error Certification__StudentAlreadyHasDiploma(address student);
     error Certification__DiplomaDoesNotExist(uint256 tokenId);
     error Certification__DiplomaAlreadyRevoked(uint256 tokenId);
+    error Certification__CredentialAlreadyAttached(uint256 tokenId);
 
     // State variables
     uint256 public immutable i_creditsRequiredForGraduation;
@@ -36,11 +37,10 @@ contract Certification is ICertification, SoulboundNFT {
         address indexed student,
         uint256 indexed tokenId,
         bytes32 documentHash,
-        string metadataURI,
-        uint256 totalCredits,
-        uint256 finalAverage
+        string metadataURI
     );
     event DiplomaRevoked(uint256 indexed tokenId, address indexed revokedBy);
+    event DiplomaCredentialAttached(uint256 indexed tokenId, bytes32 documentHash, string metadataURI);
 
     // Modifiers
     modifier onlyCore() {
@@ -84,9 +84,6 @@ contract Certification is ICertification, SoulboundNFT {
         if (s_studentToDiplomaId[student] != 0) {
             revert Certification__StudentAlreadyHasDiploma(student);
         }
-        if (bytes(metadataURI).length == 0) {
-            revert Certification__InvalidCredentialAnchor();
-        }
         if (issuer == address(0)) {
             revert Certification__AddressZero();
         }
@@ -104,14 +101,12 @@ contract Certification is ICertification, SoulboundNFT {
         s_diplomas[tokenId] = Diploma({
             documentHash: documentHash,
             metadataURI: metadataURI,
-            totalCredits: credits,
-            finalAverage: weightedAverage,
             issueTimestamp: block.timestamp,
             issuer: issuer,
             revoked: false
         });
 
-        emit DiplomaIssued(student, tokenId, documentHash, metadataURI, credits, weightedAverage);
+        emit DiplomaIssued(student, tokenId, documentHash, metadataURI);
     }
 
     /// @inheritdoc ICertification
@@ -126,6 +121,32 @@ contract Certification is ICertification, SoulboundNFT {
 
         diploma.revoked = true;
         emit DiplomaRevoked(tokenId, msg.sender);
+    }
+
+    /// @inheritdoc ICertification
+    function attachDiplomaCredential(uint256 tokenId, bytes32 documentHash, string calldata metadataURI)
+        external
+        onlyCore
+    {
+        if (_ownerOf(tokenId) == address(0)) {
+            revert Certification__DiplomaDoesNotExist(tokenId);
+        }
+
+        Diploma storage diploma = s_diplomas[tokenId];
+        if (diploma.revoked) {
+            revert Certification__DiplomaAlreadyRevoked(tokenId);
+        }
+        if (bytes(diploma.metadataURI).length > 0) {
+            revert Certification__CredentialAlreadyAttached(tokenId);
+        }
+        if (bytes(metadataURI).length == 0) {
+            revert Certification__InvalidCredentialAnchor();
+        }
+
+        diploma.documentHash = documentHash;
+        diploma.metadataURI = metadataURI;
+
+        emit DiplomaCredentialAttached(tokenId, documentHash, metadataURI);
     }
 
     //////////////////////////////

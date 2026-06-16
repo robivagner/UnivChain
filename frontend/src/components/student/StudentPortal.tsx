@@ -15,6 +15,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { IPFS_GATEWAY } from "@/constants/contracts";
 import { fetchDiplomaCredential } from "@/lib/diploma/metadata";
 import { getDeployment } from "@/lib/contracts";
+import { pages } from "@/lib/navigation/routes";
 import {
   badgeDangerClass,
   badgeNeutralClass,
@@ -139,14 +140,16 @@ export function StudentPortal() {
             {diplomaRecord && (
               <>
                 {diplomaCredential && (
-                  <p className="text-uc-text">
-                    {diplomaCredential.degreeTitle} — {diplomaCredential.major}
-                  </p>
+                  <>
+                    <p className="text-uc-text">
+                      {diplomaCredential.degreeTitle} — {diplomaCredential.major}
+                    </p>
+                    <p>
+                      Final average: {(diplomaCredential.finalAverage / 100).toFixed(2)} ·{" "}
+                      {diplomaCredential.totalCredits} credits
+                    </p>
+                  </>
                 )}
-                <p>
-                  Final average: {(Number(diplomaRecord.finalAverage) / 100).toFixed(2)} ·{" "}
-                  {diplomaRecord.totalCredits.toString()} credits
-                </p>
                 {diplomaRecord.metadataURI && (
                   <a
                     href={
@@ -163,7 +166,7 @@ export function StudentPortal() {
                 )}
               </>
             )}
-            <Link href="/verify" className={`${portalLinkClass} text-sm`}>
+            <Link href={pages.verify} className={`${portalLinkClass} text-sm`}>
               Open public verifier →
             </Link>
           </div>

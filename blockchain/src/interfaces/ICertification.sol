@@ -5,19 +5,17 @@ pragma solidity ^0.8.25;
 /// @notice Manages the issuance of final academic diplomas as Soulbound Tokens (SBTs).
 /// @dev Implemented by the Certification contract to archive immutable academic achievements.
 interface ICertification {
-    /// @dev On-chain credential record; rich fields (degree title, major, etc.) live in off-chain JSON at `metadataURI`.
+    /// @dev On-chain credential record; rich fields (degree title, major, credits, GPA) live in off-chain JSON at `metadataURI`.
     struct Diploma {
         bytes32 documentHash; // optional keccak256 of canonical UTF-8 JSON bytes
         string metadataURI; // ERC-721 token URI (IPFS/HTTPS JSON credential)
-        uint256 totalCredits; // ECTS snapshot at graduation
-        uint256 finalAverage; // GPA weighted average over passed subjects (× 100, e.g. 950 = 9.50)
         uint256 issueTimestamp; // block.timestamp at mint
         address issuer; // wallet that held DIPLOMA_ISSUER_ROLE at issuance
         bool revoked;
     }
 
     /// @notice Issues a non-transferable diploma after verifying academic requirements.
-    /// @dev Requires non-empty `metadataURI`. `documentHash` is optional (keccak256 of canonical JSON).
+    /// @dev Requires non-empty `metadataURI` when attaching. Initial mint may use empty URI and zero hash.
     function issueDiploma(
         address student,
         uint256 credits,
@@ -30,6 +28,11 @@ interface ICertification {
     /// @notice Marks a diploma as revoked; ownership is retained for auditability.
     /// @param tokenId The token ID to revoke the diploma for.
     function revokeDiploma(uint256 tokenId) external;
+
+    /// @notice Attaches off-chain credential metadata after mint (second step of issuance).
+    /// @dev Callable once per diploma while `metadataURI` is still empty.
+    function attachDiplomaCredential(uint256 tokenId, bytes32 documentHash, string calldata metadataURI)
+        external;
 
     /// @notice Returns the full on-chain diploma record.
     /// @param tokenId The token ID to retrieve the diploma for.

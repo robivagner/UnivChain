@@ -7,6 +7,7 @@ import { useIsProfessor } from "@/lib/useIsProfessor";
 import { useIsIssuer } from "@/lib/useIsIssuer";
 import { useMounted } from "@/lib/useMounted";
 import { badgeGoldClass } from "@/lib/ui/portalClasses";
+import { pages } from "@/lib/navigation/routes";
 
 const ROLE_CARDS = [
   {
@@ -150,13 +151,13 @@ export function LandingContent() {
 
         <div className="grid sm:grid-cols-2 gap-4">
           <NavCard
-            href="/verify"
+            href={pages.verify}
             title="Verify diploma"
             description="Public read-only check of on-chain diploma records."
             accentClass="portal-nav-card-emerald"
           />
           <NavCard
-            href="/enroll"
+            href={pages.student}
             title="Student portal"
             description="Enrollment, transcript, credits, and diploma access for your wallet."
             accentClass="portal-nav-card-violet"
@@ -164,7 +165,7 @@ export function LandingContent() {
             badge={!walletReady ? "Connect wallet" : undefined}
           />
           <NavCard
-            href="/professor"
+            href={pages.professor}
             title="For professors"
             description="Add subjects, post grades, and manage your courses on-chain."
             accentClass="portal-nav-card-indigo"
@@ -180,7 +181,7 @@ export function LandingContent() {
             }
           />
           <NavCard
-            href="/issuer"
+            href={pages.issuer}
             title="For diploma issuers"
             description="Check eligibility and graduate students with an on-chain diploma."
             accentClass="portal-nav-card-teal"
@@ -196,7 +197,7 @@ export function LandingContent() {
             }
           />
           <NavCard
-            href="/admin"
+            href={pages.admin}
             title="Admin dashboard"
             description="Enrollments, grant roles, and assign subjects to professors."
             accentClass="portal-nav-card-blue"

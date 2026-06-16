@@ -44,10 +44,10 @@ export function useStudentProfile() {
     query: { enabled },
   });
 
-  const { data: studentTokenId, isLoading: l4 } = useReadContract({
+  const { data: studentId, isLoading: l4 } = useReadContract({
     address: registry,
     abi: StudentRegistryABI,
-    functionName: "getStudentTokenId",
+    functionName: "getStudentId",
     args: address ? [address] : undefined,
     query: { enabled },
   });
@@ -63,7 +63,7 @@ export function useStudentProfile() {
   const hasStudentRecord =
     Boolean(isEnrolled) ||
     Boolean(hasGraduated) ||
-    (studentTokenId !== undefined && studentTokenId > 0n);
+    (studentId !== undefined && studentId > 0n);
 
   const { data: credits, isLoading: l6 } = useReadContract({
     address: gradebook,
@@ -105,15 +105,15 @@ export function useStudentProfile() {
     query: { enabled: enabled && Boolean(hasDiploma) },
   });
 
-  const tokenIdForMetadata =
-    studentTokenId !== undefined && studentTokenId > 0n ? studentTokenId : undefined;
+  const studentIdForMetadata =
+    studentId !== undefined && studentId > 0n ? studentId : undefined;
 
   const { data: studentMetadata, isLoading: l11 } = useReadContract({
     address: registry,
     abi: StudentRegistryABI,
     functionName: "getStudentMetadata",
-    args: tokenIdForMetadata !== undefined ? [tokenIdForMetadata] : undefined,
-    query: { enabled: Boolean(registry && tokenIdForMetadata !== undefined) },
+    args: studentIdForMetadata !== undefined ? [studentIdForMetadata] : undefined,
+    query: { enabled: Boolean(registry && studentIdForMetadata !== undefined) },
   });
 
   const { data: creditsRequired, isLoading: l12 } = useReadContract({
@@ -201,7 +201,7 @@ export function useStudentProfile() {
     hasGraduated: Boolean(hasGraduated),
     hasPaidFee: Boolean(hasPaidFee),
     hasStudentRecord,
-    studentTokenId,
+    studentId,
     studentMetadata: parsedMetadata,
     facultyName,
     credits: credits ?? 0n,

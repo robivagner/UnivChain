@@ -40,6 +40,29 @@ export const CertificationABI = [
   },
   {
     "type": "function",
+    "name": "attachDiplomaCredential",
+    "inputs": [
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "documentHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "metadataURI",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "balanceOf",
     "inputs": [
       {
@@ -101,16 +124,6 @@ export const CertificationABI = [
             "name": "metadataURI",
             "type": "string",
             "internalType": "string"
-          },
-          {
-            "name": "totalCredits",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "finalAverage",
-            "type": "uint256",
-            "internalType": "uint256"
           },
           {
             "name": "issueTimestamp",
@@ -613,6 +626,31 @@ export const CertificationABI = [
   },
   {
     "type": "event",
+    "name": "DiplomaCredentialAttached",
+    "inputs": [
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "documentHash",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "metadataURI",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "DiplomaIssued",
     "inputs": [
       {
@@ -638,18 +676,6 @@ export const CertificationABI = [
         "type": "string",
         "indexed": false,
         "internalType": "string"
-      },
-      {
-        "name": "totalCredits",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "finalAverage",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -740,6 +766,17 @@ export const CertificationABI = [
       },
       {
         "name": "average",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "Certification__CredentialAlreadyAttached",
+    "inputs": [
+      {
+        "name": "tokenId",
         "type": "uint256",
         "internalType": "uint256"
       }

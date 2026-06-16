@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { prefetchPortalRoute } from "@/lib/navigation/prefetchPortalRoutes";
+import { pages } from "@/lib/navigation/routes";
 
 type Options = {
   isConnected: boolean;
@@ -22,18 +23,18 @@ export function useNavPrefetch({
   const router = useRouter();
 
   useEffect(() => {
-    prefetchPortalRoute(router, "/verify");
+    prefetchPortalRoute(router, pages.verify);
   }, [router]);
 
   useEffect(() => {
     if (!isConnected) return;
 
-    prefetchPortalRoute(router, "/enroll");
+    prefetchPortalRoute(router, pages.student);
 
     if (rolesLoading) return;
 
-    if (isProfessor) prefetchPortalRoute(router, "/professor");
-    if (isIssuer) prefetchPortalRoute(router, "/issuer");
-    if (isAdmin) prefetchPortalRoute(router, "/admin");
+    if (isProfessor) prefetchPortalRoute(router, pages.professor);
+    if (isIssuer) prefetchPortalRoute(router, pages.issuer);
+    if (isAdmin) prefetchPortalRoute(router, pages.admin);
   }, [router, isConnected, rolesLoading, isAdmin, isProfessor, isIssuer]);
 }
