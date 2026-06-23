@@ -13,27 +13,28 @@ const ROLE_CARDS = [
   {
     title: "For students",
     description:
-      "Enroll, track credits and grades, and access your diploma record after graduation. Your identity is a non-transferable soulbound token while you study.",
+      "Request enrollment with an on-chain fee, then track your registry status, credits, and grades from your wallet. After graduation, your soulbound diploma NFT is the verifiable credential.",
     accent: "from-uc-violet/20 to-transparent",
     icon: "🎓",
   },
   {
     title: "For professors",
     description:
-      "After an admin grants PROFESSOR_ROLE, create subjects, post grades, and manage course activity.",
+      "After an admin grants PROFESSOR_ROLE, add subjects (or teach admin-assigned ones), post immutable grades to the Gradebook, and activate or deactivate your courses.",
     accent: "from-indigo-500/20 to-transparent",
     icon: "📚",
   },
   {
     title: "For diploma issuers",
     description:
-      "Review graduation eligibility and mint the final diploma soulbound token when academic requirements are met.",
+      "Check on-chain eligibility (credits, weighted average, enrollment status, no outstanding debt), then issue a soulbound diploma NFT with an immutable academic snapshot.",
     accent: "from-teal-400/20 to-transparent",
     icon: "📜",
   },
   {
     title: "For administrators",
-    description: "Review enrollment requests, grant roles, and assign subjects to faculty wallets.",
+    description:
+      "Review paid enrollment requests, accept students with a matriculation hash (or reject and refund), grant roles, and assign subjects to faculty wallets.",
     accent: "from-uc-cyan/20 to-transparent",
     icon: "⚙️",
   },
@@ -101,10 +102,11 @@ export function LandingContent() {
             </span>
           </h1>
           <p className="text-uc-muted text-lg leading-relaxed">
-            A hub-and-spoke university management system on Ethereum. Students request enrollment
-            with an on-chain fee payment; administrators issue soulbound identity tokens. Grades and
-            diplomas are recorded transparently and can be verified without trusting a central
-            database.
+            A hub-and-spoke university management system on Ethereum. Students request enrollment by
+            paying a registration fee in an approved token; administrators accept or reject each
+            request and register the student on-chain with a hashed matriculation number. Grades
+            live in the Gradebook, graduation mints a soulbound diploma NFT, and anyone can verify
+            credentials through public RPC reads—no central database required.
           </p>
         </div>
 
@@ -166,7 +168,7 @@ export function LandingContent() {
           />
           <NavCard
             href={pages.professor}
-            title="For professors"
+            title="Professor portal"
             description="Add subjects, post grades, and manage your courses on-chain."
             accentClass="portal-nav-card-indigo"
             disabled={!walletReady || rolesLoading || !isProfessor}
@@ -182,7 +184,7 @@ export function LandingContent() {
           />
           <NavCard
             href={pages.issuer}
-            title="For diploma issuers"
+            title="Issuer portal"
             description="Check eligibility and graduate students with an on-chain diploma."
             accentClass="portal-nav-card-teal"
             disabled={!walletReady || rolesLoading || !isIssuer}
