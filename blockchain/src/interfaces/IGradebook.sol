@@ -85,4 +85,10 @@ interface IGradebook {
     /// @param student The address of the student to calculate the average for.
     /// @return average The calculated weighted average scaled by the precision factor.
     function getWeightedAverage(address student) external view returns (uint256 average);
+
+    /// @notice Returns true if the student has at least one graded subject with a failing mark (grade < 5).
+    /// @dev Graduation requires every recorded subject to be passed; retakes that raise the grade clear the flag.
+    /// @param student The address of the student to query.
+    /// @return hasFailed True when any subject grade is below the passing threshold.
+    function hasFailedSubject(address student) external view returns (bool hasFailed);
 }

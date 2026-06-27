@@ -41,6 +41,7 @@ contract UniversityCore is IUniversityCore, AccessControl {
     error UniversityCore__StudentAlreadyRequestedEnroll(address student);
     error UniversityCore__TokenIsNotAllowed(address token);
     error UniversityCore__OutstandingStudentDebt(address student);
+    error UniversityCore__StudentHasFailedSubject(address student);
     error UniversityCore__InvalidDebtPayment(uint256 requested, uint256 owed);
 
     // State variables
@@ -415,6 +416,9 @@ contract UniversityCore is IUniversityCore, AccessControl {
         }
         if (s_feeManager.hasOutstandingDebt(student)) {
             revert UniversityCore__OutstandingStudentDebt(student);
+        }
+        if (s_gradebook.hasFailedSubject(student)) {
+            revert UniversityCore__StudentHasFailedSubject(student);
         }
     }
 

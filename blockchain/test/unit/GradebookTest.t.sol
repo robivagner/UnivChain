@@ -221,6 +221,26 @@ contract GradebookTest is Test {
 
         assertEq(gradebook.getStudentCredits(student), 4);
         assertEq(gradebook.getWeightedAverage(student), 1000); // 10.00 over 4 passed credits only
+        assertTrue(gradebook.hasFailedSubject(student));
+    }
+
+    function test_HasFailedSubjectFalseWhenAllPassed() public {
+        vm.startPrank(core);
+        gradebook.postGrade(professor, student, 1, 10);
+        gradebook.postGrade(professor, student, 2, 5);
+        vm.stopPrank();
+
+        assertFalse(gradebook.hasFailedSubject(student));
+    }
+
+    function test_HasFailedSubjectClearsAfterRetake() public {
+        vm.startPrank(core);
+        gradebook.postGrade(professor, student, 1, 4);
+        assertTrue(gradebook.hasFailedSubject(student));
+
+        gradebook.postGrade(professor, student, 1, 6);
+        assertFalse(gradebook.hasFailedSubject(student));
+        vm.stopPrank();
     }
 
     ///////////////////////////////////

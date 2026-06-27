@@ -31,4 +31,8 @@ contract MockGradebook is IGradebook {
     function getWeightedAverage(address) external pure returns (uint256) {
         return 950;
     }
+
+    function hasFailedSubject(address) external pure returns (bool) {
+        return false;
+    }
 }

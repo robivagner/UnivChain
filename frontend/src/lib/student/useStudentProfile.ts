@@ -155,6 +155,14 @@ export function useStudentProfile() {
     query: { enabled: enabled && hasStudentRecord && Boolean(paymentToken) },
   });
 
+  const { data: hasFailedSubject, isLoading: l17 } = useReadContract({
+    address: gradebook,
+    abi: GradebookABI,
+    functionName: "hasFailedSubject",
+    args: address ? [address] : undefined,
+    query: { enabled: enabled && hasStudentRecord },
+  });
+
   const parsedMetadata = useMemo(
     () => parseStudentMetadata(studentMetadata),
     [studentMetadata]
@@ -182,6 +190,8 @@ export function useStudentProfile() {
 
   const studentDebtOk = hasOutstandingDebt === false;
 
+  const allSubjectsPassed = hasFailedSubject === false;
+
   const graduationEligible =
     hasStudentRecord &&
     !Boolean(isExpelled) &&
@@ -189,10 +199,11 @@ export function useStudentProfile() {
     !Boolean(hasDiploma) &&
     creditsOk === true &&
     averageOk === true &&
+    allSubjectsPassed &&
     studentDebtOk;
 
   const isLoading =
-    l1 || l2 || l3 || l4 || l5 || l6 || l7 || l8 || l9 || l10 || l11 || l12 || l13 || l14 || l15 || l16;
+    l1 || l2 || l3 || l4 || l5 || l6 || l7 || l8 || l9 || l10 || l11 || l12 || l13 || l14 || l15 || l16 || l17;
 
   return {
     deployment,
@@ -212,6 +223,8 @@ export function useStudentProfile() {
     minAverageDisplay,
     creditsOk,
     averageOk,
+    allSubjectsPassed,
+    hasFailedSubject: Boolean(hasFailedSubject),
     graduationEligible,
     hasOutstandingDebt: Boolean(hasOutstandingDebt),
     studentDebtOwed: studentDebtOwed ?? 0n,

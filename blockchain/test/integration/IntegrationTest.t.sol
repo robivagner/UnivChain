@@ -329,6 +329,39 @@ contract IntegrationTest is Test {
         assertFalse(certification.hasValidDiploma(student));
     }
 
+    function test_RevertGraduationWhenStudentHasFailedSubject() public {
+        mockToken.mint(student, REGISTRATION_FEE);
+        vm.startPrank(student);
+        mockToken.approve(address(core), REGISTRATION_FEE);
+        core.requestEnrollment(address(mockToken));
+        vm.stopPrank();
+
+        vm.prank(admin);
+        core.acceptEnrollment(student, STUDENT_HASH);
+
+        _completeCurriculumForGraduation(student, professor, 10);
+
+        vm.startPrank(admin);
+        core.addSubject("Elective", SUBJECT_ECTS, professor);
+        vm.stopPrank();
+
+        vm.prank(professor);
+        core.postGrade(student, SUBJECTS_FOR_GRADUATION + 1, 4);
+
+        assertEq(gradebook.getStudentCredits(student), CREDITS_REQUIRED);
+        assertTrue(gradebook.hasFailedSubject(student));
+
+        vm.prank(issuer);
+        vm.expectRevert(
+            abi.encodeWithSelector(UniversityCore.UniversityCore__StudentHasFailedSubject.selector, student)
+        );
+        core.graduateStudentAndIssueDiploma(student);
+
+        assertTrue(registry.isStudentEnrolled(student));
+        assertFalse(registry.hasStudentGraduated(student));
+        assertEq(certification.balanceOf(student), 0);
+    }
+
     function test_RevertGraduationWhenStudentDebtOutstanding() public {
         mockToken.mint(student, REGISTRATION_FEE);
         vm.startPrank(student);

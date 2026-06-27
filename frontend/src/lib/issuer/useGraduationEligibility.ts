@@ -76,6 +76,12 @@ export function useGraduationEligibility(studentInput: string) {
         functionName: "hasOutstandingDebt" as const,
         args: [student] as const,
       },
+      {
+        address: deployment.gradebook,
+        abi: GradebookABI,
+        functionName: "hasFailedSubject" as const,
+        args: [student] as const,
+      },
     ];
   }, [deployment, student]);
 
@@ -96,7 +102,7 @@ export function useGraduationEligibility(studentInput: string) {
   });
 
   const parsed = useMemo(() => {
-    if (!data || data.length < 9) return undefined;
+    if (!data || data.length < 10) return undefined;
 
     const getBool = (i: number) => data[i]?.status === "success" && data[i].result === true;
     const getUint = (i: number) =>
@@ -115,6 +121,8 @@ export function useGraduationEligibility(studentInput: string) {
     const creditsOk = credits >= creditsRequired;
     const averageOk = average >= minAverage;
     const hasOutstandingDebt = getBool(8);
+    const hasFailedSubject = getBool(9);
+    const allSubjectsPassed = !hasFailedSubject;
     const studentDebtOk = !hasOutstandingDebt;
     const studentDebtOwed = studentDebtOwedRaw ?? 0n;
 
@@ -125,6 +133,7 @@ export function useGraduationEligibility(studentInput: string) {
       !hasDiploma &&
       creditsOk &&
       averageOk &&
+      allSubjectsPassed &&
       studentDebtOk;
 
     return {
@@ -140,6 +149,8 @@ export function useGraduationEligibility(studentInput: string) {
       minAverage,
       minAverageDisplay: (Number(minAverage) / 100).toFixed(2),
       averageOk,
+      hasFailedSubject,
+      allSubjectsPassed,
       hasOutstandingDebt,
       studentDebtOk,
       studentDebtOwed,

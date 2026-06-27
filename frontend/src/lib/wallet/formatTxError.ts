@@ -15,6 +15,10 @@ const FRIENDLY_REVERTS: Record<string, string> = {
   UniversityCore__AccountIsNotProfessor: "That address does not have the professor role.",
   UniversityCore__NotInitialized: "UniversityCore is not initialized on this deployment.",
   UniversityCore__AddressZero: "A required address was zero.",
+  UniversityCore__OutstandingStudentDebt:
+    "The student has outstanding university debt that must be cleared before graduation.",
+  UniversityCore__StudentHasFailedSubject:
+    "The student has at least one subject with a grade below 5. All subjects must be passed before graduation.",
   StudentRegistry__StudentNotEnrolled: "That wallet is not an enrolled student.",
   StudentRegistry__StudentAlreadyEnrolled: "That wallet is already enrolled.",
   StudentRegistry__StudentIsExpelled: "That student has been expelled.",

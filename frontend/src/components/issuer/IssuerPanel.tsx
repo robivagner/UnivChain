@@ -369,6 +369,9 @@ export function IssuerPanel() {
               {eligibility.averageOk ? "✓" : "✗"}
             </li>
             <li>
+              All subjects passed (min 5): {eligibility.allSubjectsPassed ? "yes ✓" : "no ✗"}
+            </li>
+            <li>
               University debt:{" "}
               {eligibility.hasOutstandingDebt
                 ? `${formatUnits(eligibility.studentDebtOwed, 6)} tokens owed`

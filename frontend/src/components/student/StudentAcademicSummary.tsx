@@ -99,6 +99,12 @@ export function StudentAcademicSummary({ profile }: { profile: Profile }) {
             ok={profile.averageOk}
           />
           <ProgressRow
+            label="All subjects passed"
+            value={profile.hasFailedSubject ? "Failed subject on record" : "Yes"}
+            target="No grade below 5"
+            ok={profile.allSubjectsPassed}
+          />
+          <ProgressRow
             label="University debt"
             value={profile.hasOutstandingDebt ? "Outstanding" : "Cleared"}
             target="Cleared"

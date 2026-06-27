@@ -1011,6 +1011,17 @@ export const UniversityCoreABI = [
   },
   {
     "type": "error",
+    "name": "UniversityCore__StudentHasFailedSubject",
+    "inputs": [
+      {
+        "name": "student",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "UniversityCore__StudentIsExpelled",
     "inputs": [
       {

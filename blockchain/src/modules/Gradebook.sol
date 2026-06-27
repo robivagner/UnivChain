@@ -190,6 +190,17 @@ contract Gradebook is IGradebook {
         return (totalWeightedPoints * WEIGHTED_AVERAGE_PRECISION) / totalCredits;
     }
 
+    /// @inheritdoc IGradebook
+    function hasFailedSubject(address student) external view returns (bool) {
+        uint256[] memory subjectIds = s_studentSubjectIds[student];
+        for (uint256 i = 0; i < subjectIds.length; i++) {
+            if (s_studentGrades[student][subjectIds[i]].grade < PASSING_GRADE) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     //////////////////////////////////
     /////// Internal Functions ///////
     //////////////////////////////////

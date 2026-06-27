@@ -225,6 +225,25 @@ export const GradebookABI = [
   },
   {
     "type": "function",
+    "name": "hasFailedSubject",
+    "inputs": [
+      {
+        "name": "student",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "postGrade",
     "inputs": [
       {
